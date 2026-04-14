@@ -27,11 +27,11 @@ function donateKeyboard() {
 // ─── Wise Affiliate (real, verified) ─────────────────────────────
 // Sign up: https://wise.com/us/partner/profile
 // $20 per referred customer who transfers >$200
-const WISE_LINK = 'https://wise.com/';
+const WISE_LINK = 'https://wise.com/gb/send-money/send-money-to-mongolia';
 
 // ─── Remitly Affiliate ───────────────────────────────────────────
 // $12-15 per referral
-const REMITLY_LINK = 'https://www.remitly.com/';
+const REMITLY_LINK = 'https://www.remitly.com/us/en/mongolia';
 
 // ─── Generate invoice for Telegram Stars ─────────────────────────
 async function createInvoice(chatId, stars) {
