@@ -1,12 +1,9 @@
 // Auto-growth: periodic posts, cross-posting, SEO content
 
-const { fetchAll, buildOfficial, CURRENCIES } = require('./bank-rates');
+const { generateContent, CHANNEL_ID } = require('./content-engine');
+const { fetchAll, buildOfficial } = require('./bank-rates');
 
-const FLAGS = {usd:'🇺🇸',cny:'🇨🇳',eur:'🇪🇺',rub:'🇷🇺',jpy:'🇯🇵',krw:'🇰🇷',gbp:'🇬🇧'};
-const NAMES = {usd:'Америк доллар',cny:'Хятад юань',eur:'Евро',rub:'Орос рубль',jpy:'Япон иен',krw:'Солонгос вон',gbp:'Англи фунт'};
-const CHANNEL_ID = '-1003918347360';
 const BOT_LINK = 'https://t.me/KhaanRateBot';
-const CHANNEL_LINK = 'https://t.me/khaanrate';
 
 // ─── Content generators ──────────────────────────────────────────
 
@@ -84,27 +81,28 @@ async function autoPost(bot) {
   const hourUTC = d.getUTCHours();
   const dayUTC = d.getUTCDay();
 
-  // Daily post (once per day at 9am UTC+8 = 1am UTC)
+  // Daily rates at 9am UTC+8 (1am UTC)
   if (hourUTC === 1 && now - lastDailyPost > 82800000) {
     const msg = await dailyRatesPost();
     if (msg) {
-      try { await bot.sendMessage(CHANNEL_ID, msg, {parse_mode:'HTML'}); lastDailyPost = now; console.log('📢 Daily post sent'); } catch {}
+      try { await bot.sendMessage(CHANNEL_ID, msg, {parse_mode:'HTML'}); lastDailyPost = now; console.log('📢 Daily post'); } catch {}
     }
   }
 
-  // Weekly post (Monday 9am UTC+8)
+  // Weekly summary Monday 9am UTC+8
   if (dayUTC === 1 && hourUTC === 1 && now - lastWeeklyPost > 604800000) {
     const msg = await weeklyPost();
     if (msg) {
-      try { await bot.sendMessage(CHANNEL_ID, msg, {parse_mode:'HTML'}); lastWeeklyPost = now; console.log('📢 Weekly post sent'); } catch {}
+      try { await bot.sendMessage(CHANNEL_ID, msg, {parse_mode:'HTML'}); lastWeeklyPost = now; console.log('📢 Weekly post'); } catch {}
     }
   }
 
-  // Viral posts (3x per day)
-  if (SCHEDULE.viral.hours.includes(hourUTC) && now - lastViralPost > 25200000) {
-    const msg = await viralPost();
+  // Content marketing: 5 posts/day, rotating types
+  const contentHours = [3, 7, 11, 15, 19]; // 11am,3pm,7pm,11pm,3am UTC+8
+  if (contentHours.includes(hourUTC) && now - lastViralPost > 12600000) {
+    const msg = await generateContent();
     if (msg) {
-      try { await bot.sendMessage(CHANNEL_ID, msg, {parse_mode:'HTML'}); lastViralPost = now; console.log('📢 Viral post sent'); } catch {}
+      try { await bot.sendMessage(CHANNEL_ID, msg, {parse_mode:'HTML'}); lastViralPost = now; console.log('📢 Content post'); } catch {}
     }
   }
 }
