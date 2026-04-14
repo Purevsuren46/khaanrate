@@ -362,7 +362,7 @@ bot.onText(/\/donate|❤️ Дэмжлэг/, async msg => {
 });
 
 // ─── /money — Fast money transfer (affiliate) ────────────────────
-bot.onText(/\/money/, msg => {
+bot.onText(/\/money|💸 Мөнгө илгээх/, msg => {
   send(msg.chat.id,
     `💸 <b>Гадаадад мөнгө илгээх</b>\n\n` +
     `🌍 <b>Wise</b> — 0.5% шимтгэл, 1 цагт хүрдэг\n` +
