@@ -5,6 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { fetchAll, buildOfficial, CURRENCIES, CUR_MAP } = require('./bank-rates');
 const { addReferralButtons, businessReport, getAd, postToChannel, BUSINESS_PRICE, BUSINESS_CONTACT } = require('./monetize');
 const { shareText, getTransferAd, adPricingText, BOT_USERNAME, CHANNEL } = require('./revenue');
+const { lossMessage, dailyHook, salaryMessage, viralShareMessage } = require('./engagement');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -59,36 +60,51 @@ const MAIN_MENU = {
   reply_markup:{keyboard:[
     [{text:'💵 Ханш харах'},{text:'🏦 Банк харьцуулах'}],
     [{text:'🔔 Ханшны мэдэгдэл'},{text:'💸 Мөнгө илгээх'}],
-    [{text:'💡 Зөвлөгөө'},{text:'❤️ Дэмжлэг'}]
+    [{text:'💼 Цалин бодох'},{text:'❤️ Дэмжлэг'}]
   ],resize_keyboard:true}
 };
 
 // ─── /start ──────────────────────────────────────────────────────
 bot.on('message', msg => console.log('📩', msg.text?.substring(0,30), 'from', msg.chat.id));
 
-bot.onText(/\/start/, msg => {
-  send(msg.chat.id,
-    `🦁 <b>KhaanRate — Төгрөгийн ханш</b>\n\n` +
-    `Ханшаа шалгах, банкуудыг харьцуулах, ханш өөрчлөгдөхөд мэдэгдэл авах бүхнийг нэг дор.\n\n` +
-    `Доорх товчийг дарж эхлээрэй 👇`,
-    MAIN_MENU
-  );
+bot.onText(/\/start/, async msg => {
+  const banks = await getBanks();
+  const official = buildOfficial(banks) || await getFallbackOfficial();
+  
+  // Hook: show compelling first message
+  let welcome = `🦁 <b>KhaanRate</b>\n\n`;
+  if (official?.usd) {
+    welcome += `🇺🇸 1$ = <b>₮${fmt(official.usd)}</b> байна\n`;
+    if (official.cny) welcome += `🇨🇳 1¥ = <b>₮${fmt(official.cny)}</b>\n`;
+    if (official.eur) welcome += `🇪🇺 1€ = <b>₮${fmt(official.eur)}</b>\n`;
+    
+    const loss = await lossMessage(official, banks);
+    if (loss) welcome += `\n⚠️ Зөв банкгүйгээр мөнгөө алдаж байна! Доорх товчийг дар 👇`;
+  } else {
+    welcome += `Ханшаа шалгах, банкуудыг харьцуулах, ханш өөрчлөгдөхөд мэдэгдэл авах\n\nДоорх товчийг дарж эхлээрэй 👇`;
+  }
+  
+  send(msg.chat.id, welcome, MAIN_MENU);
   if (supabase) supabase.from('users').upsert({chat_id:msg.chat.id,username:msg.chat.username,first_name:msg.chat.first_name},{onConflict:'chat_id'}).then(()=>{});
 });
 
-// ─── 💵 Ханш харах ─────────────────────────────────────────────
+// ─── 💵 Ханш харах — HOOK FIRST, then details ─────────────────
 bot.onText(/💵 Ханш харах|\/rate/, async msg => {
   const banks = await getBanks();
   const official = buildOfficial(banks) || await getFallbackOfficial();
   if (!official) { send(msg.chat.id,'⚠️ Одоогоор ханш татаж чадахгүй байна. Түр хүлээнэ үү.'); return; }
 
+  // HOOK: Show loss first — this is what makes people care
+  const loss = await lossMessage(official, banks);
+  if (loss) send(msg.chat.id, loss);
+
+  // THEN: Full rates
   let msg_text = `<b>📊 Өнөөдрийн ханш</b>\n\n`;
   for (const c of CURRENCIES) {
     const r = official[c];
     if (!r) continue;
     msg_text += `${FLAGS[c]} <b>${NAMES[c]}</b> (${c.toUpperCase()})\n`;
     msg_text += `   Албан: ₮${fmt(r)}\n`;
-    // Show banks
     for (const b of banks) {
       if (b.name==='MongolBank'||b.name==='StateBank') continue;
       const br = b.rates[c];
@@ -104,7 +120,9 @@ bot.onText(/💵 Ханш харах|\/rate/, async msg => {
   const refBtns = addReferralButtons(banks);
   const ad = getAd();
   if (ad) msg_text += `\n\n${ad}`;
-  send(msg.chat.id, msg_text, refBtns.length ? {reply_markup:{inline_keyboard:refBtns}} : {});
+  // Add viral share button
+  refBtns.push([{text:'📤 Найздаа илгээх', callback_data:'share_yes'}]);
+  send(msg.chat.id, msg_text, {reply_markup:{inline_keyboard:refBtns}});
 });
 
 // ─── 🏦 Банк харьцуулах ────────────────────────────────────────
@@ -385,6 +403,17 @@ bot.onText(/\/money|💸 Мөнгө илгээх/, msg => {
       [{text:'🚀 Remitly-р илгээх', url: REMITLY_LINK}]
     ]}}
   );
+});
+
+// ─── 💼 Цалин бодох ──────────────────────────────────────────
+bot.onText(/💼 Цалин бодох|\/salary/, async msg => {
+  const banks = await getBanks();
+  const official = buildOfficial(banks) || await getFallbackOfficial();
+  if (!official?.usd) { send(msg.chat.id,'⚠️ Ханш татаж чадахгүй байна.'); return; }
+  const s = await salaryMessage(official.usd, official.cny);
+  send(msg.chat.id, s, {reply_markup:{inline_keyboard:[[
+    {text:'📤 Найздаа илгээх', callback_data:'share_yes'}
+  ]]}});
 });
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
