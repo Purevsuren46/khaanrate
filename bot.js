@@ -6,6 +6,7 @@ const { fetchAll, buildOfficial, CURRENCIES, CUR_MAP } = require('./bank-rates')
 const { addReferralButtons, businessReport, getAd, postToChannel, BUSINESS_PRICE, BUSINESS_CONTACT } = require('./monetize');
 const { shareText, getTransferAd, adPricingText, BOT_USERNAME, CHANNEL } = require('./revenue');
 const { lossMessage, dailyHook, salaryMessage, viralShareMessage } = require('./engagement');
+const { apiDocsMessage, apiPricingMessage, generateApiKey, getApiKey, incrementUsage } = require('./api');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -212,6 +213,8 @@ bot.onText(/💡 Зөвлөгөө|\/help/, msg => {
     `📊 <b>/best USD</b> — шилдэг банк нэг харцад\n` +
     `📋 <b>/report</b> — бизнес тайлан\n` +
     `📤 <b>/share</b> — найздаа илгээх\n` +
+    `💼 <b>/salary</b> — цалингаа USD-р бодох\n` +
+    `🔌 <b>/api</b> — API түлхүүр, үнэ\n` +
     `❤️ <b>/donate</b> — ботыг дэмжих\n\n` +
     `🇺🇸 USD 🇨🇳 CNY 🇪🇺 EUR 🇷🇺 RUB\n🇯🇵 JPY 🇰🇷 KRW 🇬🇧 GBP`
   );
@@ -414,6 +417,32 @@ bot.onText(/💼 Цалин бодох|\/salary/, async msg => {
   send(msg.chat.id, s, {reply_markup:{inline_keyboard:[[
     {text:'📤 Найздаа илгээх', callback_data:'share_yes'}
   ]]}});
+});
+
+// ─── /api — API documentation & pricing ───────────────────────
+bot.onText(/\/api$/, msg => { send(msg.chat.id, apiDocsMessage()); });
+
+bot.onText(/\/api_pricing|\/api үнэ/, msg => { send(msg.chat.id, apiPricingMessage()); });
+
+// ─── /api_key — Generate API key ────────────────────────────────
+bot.onText(/\/api_key/, async msg => {
+  if (!supabase) { send(msg.chat.id, '❌ API түлхүүр үүсгэх боломжгүй.'); return; }
+  
+  // Check if user already has a key
+  const { data: existing } = await supabase.from('api_keys').select('*').eq('chat_id', msg.chat.id).single();
+  if (existing) {
+    send(msg.chat.id, `🔑 <b>Таны API түлхүүр:</b>\n\n<code>${existing.key}</code>\n\n📋 Төлөвлөгөө: ${existing.plan || 'free'}\n📊 Хүсэлт өнөөдөр: ${existing.requests_today || 0}/${PLANS[existing.plan||'free'].limit === Infinity ? '∞' : PLANS[existing.plan||'free'].limit}\n\n🔌 Үнэ харах → /api_pricing`);
+    return;
+  }
+  
+  const key = generateApiKey();
+  const { error } = await supabase.from('api_keys').insert({
+    key, chat_id: msg.chat.id, plan: 'free', requests_today: 0
+  });
+  
+  if (error) { send(msg.chat.id, '❌ Алдаа гарлаа. Дараа дахин оролдоно уу.'); return; }
+  
+  send(msg.chat.id, `🔑 <b>API түлхүүр үүслээ!</b>\n\n<code>${key}</code>\n\n📋 Төлөвлөгөө: Free (100 хүсэлт/өдөр)\n\n📌 Ашиглах:\n<code>GET https://khaanrate.api/rates?key=${key}</code>\n\n⭐ Pro болгох → /api_pricing`);
 });
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
