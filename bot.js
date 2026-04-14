@@ -40,10 +40,12 @@ async function getFallbackOfficial() {
 function send(chatId, text, extra={}) { extra.parse_mode='HTML'; return bot.sendMessage(chatId,text,extra); }
 function fmt(n) { return Number(n).toLocaleString('en-US',{maximumFractionDigits:2}); }
 
+// cheapest = best for customer. type='buy' means customer buys currency = lowest sell. type='sell' means customer sells currency = highest buy.
 function findCheapest(banks, currency, type) {
   let best = null, bestVal = type==='buy' ? Infinity : 0;
   for (const b of banks) {
-    const v = b.rates[currency]?.[type];
+    if (b.name==='MongolBank'||b.name==='StateBank') continue; // skip official-only
+    const v = type==='buy' ? b.rates[currency]?.sell : b.rates[currency]?.buy;
     if (!v) continue;
     if (type==='buy' && v < bestVal) { bestVal=v; best=b; }
     if (type==='sell' && v > bestVal) { bestVal=v; best=b; }
@@ -63,12 +65,11 @@ async function ratesMsg() {
     if (!r) continue;
     msg += `${FLAGS[c]||'💱'} ${c.toUpperCase()}: ₮${fmt(r)}\n`;
     for (const b of banks) {
-      if (b.name==='MongolBank'||b.name==='StateBank') continue;
+      if (b.name==='MongolBank'||b.name==='StateBank') continue; // skip official
       const br = b.rates[c];
-      if (!br) continue;
-      const cheapBuy = findCheapest(banks,c,'buy')?.name===b.name;
-      const cheapSell = findCheapest(banks,c,'sell')?.name===b.name;
-      const trophy = cheapBuy ? ' 🏆' : '';
+      if (!br?.sell && !br?.buy) continue;
+      const cheapest = findCheapest(banks,c,'buy');
+      const trophy = cheapest?.name===b.name ? ' 🏆' : '';
       msg += `  └ ${b.mn}: Авах ₮${fmt(br.sell)} | Зарах ₮${fmt(br.buy)}${trophy}\n`;
     }
   }
