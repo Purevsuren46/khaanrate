@@ -63,6 +63,8 @@ const MAIN_MENU = {
 };
 
 // ─── /start ──────────────────────────────────────────────────────
+bot.on('message', msg => console.log('📩', msg.text?.substring(0,30), 'from', msg.chat.id));
+
 bot.onText(/\/start/, msg => {
   send(msg.chat.id,
     `🦁 <b>KhaanRate — Төгрөгийн ханш</b>\n\n` +
