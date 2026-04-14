@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
 const { fetchAll, buildOfficial, CURRENCIES, CUR_MAP } = require('./bank-rates');
-const { addReferralButtons, businessReport } = require('./monetize');
+const { addReferralButtons, businessReport, getAd, postToChannel, BUSINESS_PRICE, BUSINESS_CONTACT } = require('./monetize');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -74,6 +74,8 @@ async function ratesMsg() {
       msg += `  └ ${b.mn}: Авах ₮${fmt(br.sell)} | Зарах ₮${fmt(br.buy)}${trophy}\n`;
     }
   }
+  const ad = getAd();
+  if (ad) msg += `\n━━━━━━━━━━\n${ad}`;
   return msg;
 }
 
@@ -94,6 +96,8 @@ async function compareMsg(currency) {
   const bestSell = findCheapest(banks,currency,'sell');
   if (bestBuy) msg += `\n🟢 Хамгийн хямд авах: ${bestBuy.mn}`;
   if (bestSell) msg += `\n🔴 Хамгийн өндөр зарах: ${bestSell.mn}`;
+  const ad = getAd();
+  if (ad) msg += `\n━━━━━━━━━━\n${ad}`;
   return msg;
 }
 
@@ -110,6 +114,8 @@ async function bestMsg(currency) {
     const d = bestBuy.rates[currency].sell - official[currency];
     msg += `\n💡 Монголбанктай харьцуулалт: ${d>0?'+':''}₮${fmt(d)}`;
   }
+  const ad = getAd();
+  if (ad) msg += `\n━━━━━━━━━━\n${ad}`;
   return msg;
 }
 
@@ -240,12 +246,25 @@ async function checkAlerts() {
 }
 setInterval(checkAlerts, 300000);
 
+// Channel auto-post daily
+postToChannel(bot);
+setInterval(() => postToChannel(bot), 3600000); // check hourly, post daily
+
 // ─── Business report ───────────────────────────────────────────
 bot.onText(/\/report/, async msg => {
   const report = await businessReport();
   if (report) send(msg.chat.id, `<pre>${report}</pre>`, {parse_mode:'HTML'});
   else send(msg.chat.id, '❌ Тайлан бэлтгэхэд алдаа.');
 });
+
+// ─── Business subscription ───────────────────────────────────────
+bot.onText(/\/business/, msg => {
+  send(msg.chat.id, `💼 <b>Бизнес API</b>\n\n₮${BUSINESS_PRICE.toLocaleString()}/сар\n• Өдөр тутмын JSON API\n• Email тайлан\n• Webhook мэдэгдэл\n\nХолбогдох: ${BUSINESS_CONTACT}`);
+});
+
+// Add ad to every rate reply
+const origRatesMsg = ratesMsg;
+// Override: inject ad into rate messages
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 

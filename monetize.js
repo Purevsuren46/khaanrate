@@ -69,4 +69,69 @@ async function businessReport() {
   return report;
 }
 
-module.exports = { REFERRALS, addReferralButtons, generateApiKey, businessReport };
+module.exports = { REFERRALS, addReferralButtons, generateApiKey, businessReport, getAd, postToChannel, BUSINESS_PRICE, BUSINESS_CONTACT, ADS };
+
+// ─── Sponsored messages ─────────────────────────────────────────
+// Advertisers pay to have their message shown in bot replies
+const ADS = [
+  { text: '💳 Голомт Банк — Гадаадад мөнгө илгээх 0% шимтгэлээр! → golomtbank.com', active: true, impressions: 0 },
+  { text: '💱 Хас Банк — Валют солилцоо хамгийн хямд ханшаар! → xacbank.mn', active: true, impressions: 0 },
+];
+
+function getAd() {
+  const active = ADS.filter(a => a.active);
+  if (!active.length) return null;
+  const ad = active[Math.floor(Math.random() * active.length)];
+  ad.impressions++;
+  return ad.text;
+}
+
+// ─── Business subscription ───────────────────────────────────────
+// ₮50,000/сар — daily API access + email report
+const BUSINESS_PRICE = 50000;
+const BUSINESS_CONTACT = '@khaanrate_support';
+
+// ─── Channel auto-post ───────────────────────────────────────────
+const CHANNEL_ID = '@khaanrate'; // create this channel manually
+let lastChannelPost = 0;
+
+async function postToChannel(bot) {
+  // Post once per day at ~9am UTC+8 (1am UTC)
+  const now = Date.now();
+  if (now - lastChannelPost < 86400000) return;
+  
+  const banks = await fetchAll();
+  const official = buildOfficial(banks);
+  if (!official) return;
+  
+  let msg = '📊 ӨДРИЙН ХАНШ\n';
+  msg += `📅 ${new Date().toISOString().split('T')[0]}\n\n`;
+  const FLAGS = {usd:'🇺🇸',cny:'🇨🇳',eur:'🇪🇺',rub:'🇷🇺',jpy:'🇯🇵',krw:'🇰🇷',gbp:'🇬🇧'};
+  const CURRENCIES = ['usd','cny','eur','rub','jpy','krw','gbp'];
+  
+  for (const c of CURRENCIES) {
+    const r = official[c];
+    if (!r) continue;
+    msg += `${FLAGS[c]} ${c.toUpperCase()}: ₮${Number(r).toLocaleString()}`;
+    // Add cheapest bank
+    for (const b of banks) {
+      if (b.name==='MongolBank'||b.name==='StateBank') continue;
+      const br = b.rates[c];
+      if (br?.sell && br.sell <= r * 1.005) {
+        msg += ` | ${b.mn} ₮${br.sell}`;
+        break;
+      }
+    }
+    msg += '\n';
+  }
+  
+  msg += '\n📱 @KhaanRateBot — Ханш шалгах бот';
+  
+  try {
+    await bot.sendMessage(CHANNEL_ID, msg);
+    lastChannelPost = now;
+    console.log('📢 Channel post sent');
+  } catch (e) {
+    console.log('📢 Channel not found — create @khaanrate channel and add bot as admin');
+  }
+}
