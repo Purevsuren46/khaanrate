@@ -3,6 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
 const { fetchAll, buildOfficial, CURRENCIES, CUR_MAP } = require('./bank-rates');
+const { addReferralButtons, businessReport } = require('./monetize');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -144,7 +145,13 @@ bot.onText(/\/start/, msg => {
   if (supabase) supabase.from('users').upsert({chat_id:msg.chat.id,username:msg.chat.username,first_name:msg.chat.first_name},{onConflict:'chat_id'}).then(()=>{});
 });
 
-bot.onText(/📊 Ханш|\/rate/, async msg => { send(msg.chat.id, '⏳ Татаж байна...'); send(msg.chat.id, await ratesMsg()); });
+bot.onText(/📊 Ханш|\/rate/, async msg => {
+  send(msg.chat.id, '⏳ Татаж байна...');
+  const banks = await getBanks();
+  const text = await ratesMsg();
+  const refBtns = addReferralButtons(banks);
+  send(msg.chat.id, text, refBtns.length ? {reply_markup:{inline_keyboard:refBtns}} : {});
+});
 
 bot.onText(/Банк харьцуулалт|\/banks/, msg => {
   bot.sendMessage(msg.chat.id, '💱 Валют сонгоно уу:', {
@@ -197,7 +204,7 @@ bot.onText(/\/alerts/, async msg => {
 });
 
 bot.onText(/❓ Тусламж|\/help/, msg => {
-  send(msg.chat.id, '❓ <b>Тусламж</b>\n\n📊 Ханш — Монголбанк + 3 банк\n🏦 /banks — харьцуулалт\n/alert USD 3580\n/alerts\n/best USD');
+  send(msg.chat.id, '❓ <b>Тусламж</b>\n\n📊 Ханш — Монголбанк + 3 банк\n🏦 /banks — харьцуулалт\n/alert USD 3580\n/alerts\n/best USD\n/report — бизнес тайлан');
 });
 
 bot.on('callback_query', async q => {
@@ -232,6 +239,13 @@ async function checkAlerts() {
   }
 }
 setInterval(checkAlerts, 300000);
+
+// ─── Business report ───────────────────────────────────────────
+bot.onText(/\/report/, async msg => {
+  const report = await businessReport();
+  if (report) send(msg.chat.id, `<pre>${report}</pre>`, {parse_mode:'HTML'});
+  else send(msg.chat.id, '❌ Тайлан бэлтгэхэд алдаа.');
+});
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 
