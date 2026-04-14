@@ -73,6 +73,7 @@ const MAIN_MENU = {
     [{text:'💵 Ханш харах'},{text:'🏦 Банк харьцуулах'}],
     [{text:'🧮 Хөрвүүлэх'},{text:'🚗 Машины импорт'}],
     [{text:'🏠 Зээл'},{text:'💳 Кредит'}],
+    [{text:'📊 Хүү харах'},{text:'💸 Мөнгө илгээх'}],
     [{text:'🔔 Ханшны мэдэгдэл'},{text:'💸 Мөнгө илгээх'}],
     [{text:'❤️ Дэмжлэг'}]
   ],resize_keyboard:true}
@@ -81,6 +82,7 @@ const MAIN_MENU = {
 // ─── /start ──────────────────────────────────────────────────────
 const { calculateCarImport, formatCarResult, carStartMessage, carCountryKeyboard, carPriceKeyboard, carPresetsKeyboard, carSessions } = require('./car-import');
 const { calculateMortgage, formatMortgage, calculatePersonalLoan, formatPersonalLoan, mortgageQuickEstimate } = require('./loan-calc');
+const { formatMortgageRates, formatPersonalRates, formatCarRates, formatAllRates } = require('./bank-rates-loan');
 
 bot.on('message', msg => console.log('📩', msg.text?.substring(0,30), 'from', msg.chat.id));
 
@@ -346,6 +348,22 @@ bot.on('callback_query', async q => {
   }
 
   // ─── Car import callbacks ───
+  // ─── Interest rate callbacks ───
+  if (data.startsWith('rates_')) {
+    bot.answerCallbackQuery(q.id);
+    try {
+      const type = data.replace('rates_','');
+      let msg;
+      if (type === 'mortgage_mnt') msg = await formatMortgageRates('mnt');
+      else if (type === 'mortgage_usd') msg = await formatMortgageRates('usd');
+      else if (type === 'personal') msg = await formatPersonalRates();
+      else if (type === 'car') msg = await formatCarRates();
+      else msg = await formatAllRates();
+      send(chatId, msg);
+    } catch(e) { send(chatId, '❌ Хүү татаж чадахгүй байна'); }
+    return;
+  }
+
   if (data.startsWith('carpre_')) {
     bot.answerCallbackQuery(q.id);
     // carpre_japan_2000000_jpy_2019_1800_left_hybrid
@@ -916,6 +934,20 @@ bot.onText(/\/credit\s+(\d+)\s+(\d+)\s+(\d+)/, async (msg, match) => {
       ]}
     });
   } catch(e) { send(msg.chat.id, '❌ Тооцоолж чадахгүй байна'); }
+});
+
+// ─── 📊 Хүү харах — INTEREST RATES LIKE EXCHANGE RATES ────────
+bot.onText(/📊 Хүү харах|\/rates|\/хүү/, async msg => {
+  send(msg.chat.id,
+    `📊 <b>Алийн хүүг харах вэ?</b>`,
+    {reply_markup:{inline_keyboard:[
+      [{text:'🏠 Орон сууц (MNT)',callback_data:'rates_mortgage_mnt'},
+       {text:'🏠 Орон сууц (USD)',callback_data:'rates_mortgage_usd'}],
+      [{text:'💳 Хувь хүний зээл',callback_data:'rates_personal'},
+       {text:'🚗 Машин',callback_data:'rates_car'}],
+      [{text:'📊 Бүх хүү',callback_data:'rates_all'}]
+    ]}}
+  );
 });
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
