@@ -27,13 +27,15 @@ async function xacbank() {
   try {
     const {data} = await axios.get('https://xacbank.mn/api/currencies', {timeout:8000});
     const rates = {};
+    const official = {};
     for (const doc of (data.docs||[])) {
       const code = doc.code?.toLowerCase();
       if (CURRENCIES.includes(code)) {
         rates[code] = {buy: doc.buyCash||doc.buy||0, sell: doc.sellCash||doc.sell||0};
+        if (doc.alban) official[code] = doc.alban;
       }
     }
-    return Object.keys(rates).length ? {name:'XacBank', mn:'💚 Хас Банк', rates, alban: data.docs[0]?.alban} : null;
+    return Object.keys(rates).length ? {name:'XacBank', mn:'💚 Хас Банк', rates, official} : null;
   } catch { return null; }
 }
 
@@ -42,13 +44,15 @@ async function statebank() {
   try {
     const {data} = await axios.get('https://www.statebank.mn/back/api/fetchrate', {timeout:8000});
     const rates = {};
+    const official = {};
     for (const item of data) {
       const code = item.curCode?.toLowerCase();
       if (CURRENCIES.includes(code)) {
         rates[code] = {buy: item.cashBuy||0, sell: item.cashSale||0};
+        official[code] = item.mnBankSale || item.mnBankBuy || 0;
       }
     }
-    return Object.keys(rates).length ? {name:'StateBank', mn:'🏛️ Төрийн Банк', rates, alban: data.find(d=>d.curCode==='USD')?.mnBankSale} : null;
+    return Object.keys(rates).length ? {name:'StateBank', mn:'🏛️ Төрийн Банк', rates, official} : null;
   } catch { return null; }
 }
 
@@ -101,8 +105,11 @@ function getOfficial(banks) {
 
 // Build official rates from StateBank/XacBank response (they include mnBankSale)
 function buildOfficial(banks) {
+  // Priority: StateBank official (mnBankSale) > XacBank alban > MongolBank > fallback
   const sb = banks.find(b => b.name === 'StateBank');
-  if (sb?.alban) return sb.rates; // StateBank has per-currency mnBankSale
+  if (sb?.official && Object.values(sb.official).some(v => v > 0)) return sb.official;
+  const xb = banks.find(b => b.name === 'XacBank');
+  if (xb?.official && Object.values(xb.official).some(v => v > 0)) return xb.official;
   const mb = banks.find(b => b.name === 'MongolBank');
   return mb?.rates || null;
 }
