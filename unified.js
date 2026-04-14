@@ -178,7 +178,12 @@ async function fetchXacMortgage() {
       const title = doc.title || '';
       for (const block of doc.layout || []) {
         if (block.blockType !== 'productConditions') continue;
-        let loan = { bank: 'Хас Банк', mn: '💚 Хас Банк 🔴', source: 'api', title };
+        let loan = { bank: 'Хас Банк', mn: '💚 Хас Банк', source: 'api', title, isMonthly: false, isBusiness: false };
+        // Determine type from title
+        const t = title.toLowerCase();
+        if (t.includes('бизнес') || t.includes('барилг') || t.includes('ногоон бизнес') || t.includes('зээлийн шугам') || t.includes('эргэлт')) {
+          loan.isBusiness = true;
+        }
         for (const cond of block.conditions || []) {
           try {
             for (const child of cond.value?.root?.children || []) {
@@ -194,9 +199,23 @@ async function fetchXacMortgage() {
                 }
                 const line = texts.join(' ');
                 if (line.includes('хүү')) {
-                  const m = line.match(/(\d+\.?\d*)%\s*-?\s*(\d+\.?\d*)%/);
-                  if (m) { loan.min = parseFloat(m[1]); loan.max = parseFloat(m[2]); }
-                  else { const m2 = line.match(/(\d+\.?\d*)%/); if (m2) { loan.min = parseFloat(m2[1]); loan.max = loan.min; } }
+                  // Check if monthly rate
+                  if (line.includes('сараар') || line.includes('сарын')) {
+                    loan.isMonthly = true;
+                  }
+                  // For ЖАЙКА: "9.28% 7%" means base rate + discounted rate
+                  const jicaMatch = line.match(/(\d+\.?\d*)%\s+(\d+\.?\d*)%/);
+                  if (jicaMatch && !line.includes('-')) {
+                    loan.min = parseFloat(jicaMatch[2]); // discounted
+                    loan.max = parseFloat(jicaMatch[1]); // base
+                    loan.isBusiness = true;
+                  } else {
+                    const m = line.match(/(\d+\.?\d*)%\s*-\s*(\d+\.?\d*)%/);
+                    if (m) { loan.min = parseFloat(m[1]); loan.max = parseFloat(m[2]); }
+                    else { const m2 = line.match(/(\d+\.?\d*)%/); if (m2) { loan.min = parseFloat(m2[1]); loan.max = loan.min; } }
+                  }
+                  // Any rate below 5% is definitely monthly (business)
+                  if (loan.min < 5) loan.isMonthly = true;
                 }
                 if (line.includes('хугацаа')) {
                   const ym = line.match(/(\d+)\s*сар/); if (ym) loan.maxMonths = parseInt(ym[1]);
@@ -210,6 +229,14 @@ async function fetchXacMortgage() {
           } catch {}
         }
         if (loan.min) {
+          // Convert monthly rate to annual
+          if (loan.isMonthly) {
+            loan.min = Math.round(loan.min * 12 * 10) / 10;
+            loan.max = Math.round(loan.max * 12 * 10) / 10;
+            loan.isBusiness = true;
+          }
+          // Ensure min < max
+          if (loan.min > loan.max) { const tmp = loan.min; loan.min = loan.max; loan.max = tmp; }
           loan.maxYears = loan.maxYears || Math.round((loan.maxMonths || 60) / 12);
           loan.minDown = 30;
           results.push(loan);
@@ -233,7 +260,7 @@ async function calculateMortgage({ propertyPrice, downPct, years, salary, curren
   // Combine: XacBank API rates + known bank rates
   const allBanks = [
     ...xacRates.filter(r => r.maxYears >= years).map(r => ({
-      mn: r.mn, min: r.min, max: r.max, maxYears: r.maxYears, minDown: r.minDown, fee: r.fee || 1.0, source: 'api', title: r.title
+      mn: '💚 Хас Банк', min: r.min, max: r.max, maxYears: r.maxYears, minDown: r.minDown, fee: r.fee || 1.0, source: 'api', title: r.title
     })),
     ...MORTGAGE_RATES.map(b => {
       const rateObj = isUSD ? b.usd : b.mnt;
@@ -468,15 +495,16 @@ async function calculateCarImport({ price, currency, country, year, cc, isLeftHa
 }
 
 function formatCarImport(r) {
-  const currSymbol = r.currency === 'usd' ? '$' : r.currency === 'cny' ? '¥' : '';
+  const currSymbol = r.currency === 'usd' ? '$' : r.currency === 'cny' ? '¥' : r.currency === 'jpy' ? '¥' : r.currency === 'krw' ? '₩' : r.currency === 'eur' ? '€' : r.currency === 'gbp' ? '£' : '';
   let msg = `🚗 <b>МАШИНЫ ИМПОРТЫН ТООЦОО</b>\n\n`;
   msg += `┌─────────────────────\n`;
   msg += `│ Үнэ: ${currSymbol}${fmt(r.price)} (₮${fmt(r.priceMnt)})\n`;
-  msg += `│ Он: ${r.year} | ${fmt(r.cc)}cc`;
+  const age = new Date().getFullYear() - r.year;
+  msg += `│ Он: ${r.year} (${age} настай) | ${fmt(r.cc)}cc`;
   if (r.isElectric) msg += ` | ⚡Цахилгаан`;
   else if (r.isHybrid) msg += ` | 🔋Хайбрид`;
   msg += `\n`;
-  msg += `│ Жолоо: ${r.isLeftHand ? 'Зүүн ✅' : 'Баруун'}\n`;
+  msg += `│ Жолоо: ${r.isLeftHand ? 'Зүүн ✅ (×0.85)' : 'Баруун (×1.0)'}\n`;
   msg += `│ Улс: ${COUNTRY_LABELS[r.country] || r.country}\n`;
   msg += `└─────────────────────\n\n`;
 
@@ -526,7 +554,7 @@ async function formatMortgageRates(currency) {
   });
 
   const allRates = [
-    ...xacRates.map(r => ({ mn: r.mn, min: r.min, max: r.max, maxYears: r.maxYears, minDown: r.minDown || 30, fee: r.fee || 1.0, source: 'api', title: r.title })),
+    ...xacRates.map(r => ({ mn: '💚 Хас Банк', min: r.min, max: r.max, maxYears: r.maxYears, minDown: r.minDown || 30, fee: r.fee || 1.0, source: 'api', title: r.title, isBusiness: r.isBusiness || false })),
     ...bankRates.map(r => ({ ...r, source: 'known' }))
   ].sort((a,b) => a.min - b.min);
 
@@ -537,7 +565,8 @@ async function formatMortgageRates(currency) {
     const live = r.source === 'api' ? ' 🔴' : '';
     const win = r.min === allRates[0].min ? ' 🏆' : '';
     const extra = r.title ? ` (${r.title})` : '';
-    msg += `${r.mn}${live}${win}\n`;
+    const bizTag = r.isBusiness ? ' 🏢' : '';
+    msg += `${r.mn}${live}${win}${bizTag}\n`;
     msg += `   <b>${fmtD(r.min,1)}%${r.max !== r.min ? ' — ' + fmtD(r.max,1) + '%' : ''}</b>/жил${extra}\n`;
     msg += `   Хугацаа: ${r.maxYears} жил | Урьдчилгаа: ${r.minDown}%\n`;
     if (r.fee) msg += `   Шимтгэл: ${fmtD(r.fee,1)}%\n`;
@@ -592,7 +621,8 @@ async function formatAllRates() {
   if (xacRates.length) {
     msg += `\n🔴 <b>Хас Банк (LIVE API):</b>\n`;
     for (const r of xacRates) {
-      if (r.title) msg += `• ${r.title}: ${fmtD(r.min,1)}% — ${fmtD(r.max,1)}%\n`;
+      const biz = r.isBusiness ? ' 🏢' : '';
+      if (r.title) msg += `• ${r.title}${biz}: ${fmtD(r.min,1)}% — ${fmtD(r.max,1)}%/жил\n`;
     }
   }
   msg += `\n💳 <b>Хувь хүний зээл:</b>\n`;
@@ -615,6 +645,7 @@ async function getOfficial() {
 
 module.exports = {
   fmt, fmtD, FLAGS, NAMES,
+  getOfficial,
   convertCurrency, formatConversion,
   calcMonthlyPayment,
   calculateMortgage, formatMortgage,
