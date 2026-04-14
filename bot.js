@@ -249,9 +249,47 @@ bot.onText(/\/report/, async msg => {
 });
 
 // ─── Callbacks ──────────────────────────────────────────────────
+// ─── /content — Social media content ─────────────────────────────
+bot.onText(/\/content/, async msg => {
+  send(msg.chat.id, '📱 <b>Social media контент</b>\n\nАлийг харуулах вэ?', {
+    reply_markup:{inline_keyboard:[
+      [{text:'📘 Facebook',callback_data:'soc_fb'},{text:'📸 Instagram',callback_data:'soc_ig'}],
+      [{text:'🐦 Twitter/X',callback_data:'soc_tw'},{text:'💬 Telegram',callback_data:'soc_tg'}],
+      [{text:'📋 Бүгд',callback_data:'soc_all'}]
+    ]}
+  });
+});
+
 bot.on('callback_query', async q => {
   const chatId = q.message.chat.id;
-  if (q.data.startsWith('cmp_')) {
+  const data = q.data;
+
+  if (data.startsWith('soc_')) {
+    bot.answerCallbackQuery(q.id);
+    const content = await allContent();
+    const type = data.replace('soc_','');
+    
+    if (type === 'fb') {
+      const posts = content.facebook;
+      for (let i = 0; i < posts.length; i++) {
+        await send(chatId, `<b>📘 Facebook #${i+1}</b>\n\n${posts[i]}`);
+      }
+    } else if (type === 'ig') {
+      content.instagram.forEach((p,i) => send(chatId, `<b>📸 Instagram #${i+1}</b>\n\n${p}`));
+    } else if (type === 'tw') {
+      content.twitter.forEach((p,i) => send(chatId, `<b>🐦 Twitter #${i+1}</b>\n\n${p}`));
+    } else if (type === 'tg') {
+      send(chatId, `<b>💬 Telegram групп</b>\n\n${content.telegram}`);
+    } else if (type === 'all') {
+      send(chatId, `<b>💬 Telegram групп</b>\n\n${content.telegram}`);
+      send(chatId, `<b>📘 Facebook #1</b>\n\n${content.facebook[0]}`);
+      send(chatId, `<b>📸 Instagram #1</b>\n\n${content.instagram[0]}`);
+      send(chatId, `<b>🐦 Twitter #1</b>\n\n${content.twitter[0]}`);
+    }
+    return;
+  }
+
+  if (data.startsWith('cmp_')) {
     bot.answerCallbackQuery(q.id);
     send(chatId, await compareMsg(q.data.replace('cmp_','')));
     return;
@@ -298,6 +336,7 @@ async function checkAlerts() {
 }
 setInterval(checkAlerts, 300000);
 
+const { allContent } = require('./social-content');
 const { autoPost } = require('./autopost');
 
 // Channel auto-post (replaces old postToChannel)
