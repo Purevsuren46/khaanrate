@@ -8,7 +8,8 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const BANKS_API = 'https://mongolian-bank-exchange-rate-6620c122ff22.herokuapp.com';
-const FX_API = 'https://open.er-api.com/v6/latest/USD';
+const FX_API = 'https://open.er-api.com/v6/latest/USD'; // Fallback
+const MONGOLBANK_API = 'https://www.mongolbank.mn/mn/currency-rates';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
@@ -39,16 +40,59 @@ let cachedBankAt = 0;
 let cachedFxRates = null;
 let cachedFxAt = 0;
 
-// Official rates from open.er-api.com (free, no key, daily updates)
+// Official rates from Mongolbank (via Puppeteer) with open.er-api.com fallback
 async function getOfficialRates() {
   const now = Date.now();
-  if (cachedFxRates && now - cachedFxAt < 300000) return cachedFxRates;
+  if (cachedFxRates && now - cachedFxAt < 3600000) return cachedFxRates; // 1hr cache
 
+  // Try Mongolbank first (official rates)
+  try {
+    const puppeteer = require('puppeteer');
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    
+    let rateData = null;
+    page.on('response', async (response) => {
+      if (response.url().includes('currency-rates/data')) {
+        try { rateData = await response.json(); } catch(e) {}
+      }
+    });
+    
+    await page.goto(MONGOLBANK_API, { waitUntil: 'networkidle2', timeout: 30000 });
+    await new Promise(r => setTimeout(r, 5000));
+    await browser.close();
+    
+    if (rateData && rateData.success && rateData.data) {
+      const latest = rateData.data[rateData.data.length - 1];
+      // Parse formatted numbers like "3,573.09"
+      const parseNum = s => parseFloat((s || '0').replace(/,/g, ''));
+      cachedFxRates = {
+        _date: latest.RATE_DATE,
+        _source: 'Монголбанк',
+        usd: { cash: { buy: parseNum(latest.USD), sell: parseNum(latest.USD) } },
+        cny: { cash: { buy: parseNum(latest.CNY), sell: parseNum(latest.CNY) } },
+        eur: { cash: { buy: parseNum(latest.EUR), sell: parseNum(latest.EUR) } },
+        rub: { cash: { buy: parseNum(latest.RUB), sell: parseNum(latest.RUB) } },
+        jpy: { cash: { buy: parseNum(latest.JPY), sell: parseNum(latest.JPY) } },
+        krw: { cash: { buy: parseNum(latest.KRW), sell: parseNum(latest.KRW) } },
+        gbp: { cash: { buy: parseNum(latest.GBP), sell: parseNum(latest.GBP) } },
+      };
+      cachedFxAt = now;
+      console.log('📊 Mongolbank rates loaded:', latest.RATE_DATE);
+      return cachedFxRates;
+    }
+  } catch (err) {
+    console.error('Mongolbank scrape error:', err.message);
+  }
+
+  // Fallback to open.er-api.com
   try {
     const { data } = await axios.get(FX_API, { timeout: 10000 });
-    if (!data || !data.rates) throw new Error('No rates in response');
+    if (!data || !data.rates) throw new Error('No rates');
     const mnt = data.rates.MNT;
     cachedFxRates = {
+      _date: data.time_last_update_utc,
+      _source: 'open.er-api.com',
       usd: { cash: { buy: Math.round(mnt), sell: Math.round(mnt) } },
       cny: { cash: { buy: Math.round(mnt / data.rates.CNY * 100) / 100, sell: Math.round(mnt / data.rates.CNY * 100) / 100 } },
       eur: { cash: { buy: Math.round(mnt / data.rates.EUR), sell: Math.round(mnt / data.rates.EUR) } },
@@ -101,7 +145,11 @@ async function formatOfficialRates() {
   if (!rates) return '📊 Ханшны мэдээлэл одоогоор байхгүй байна.';
 
   const bankRates = await getBankRates();
-  let msg = '<b>📊 Төгрөгийн ханш (live)</b>\n\n';
+  const source = rates._source || '';
+  const dateStr = rates._date || '';
+  let msg = `<b>📊 ${source === 'Монголбанк' ? 'Монголбанкны албан ёсны ханш' : 'Төгрөгийн ханш'}</b>`;
+  if (dateStr) msg += `\n📅 ${dateStr}\n`;
+  msg += '\n';
   for (const code of PRIORITY_CURRENCIES) {
     const r = rates[code];
     if (r) {
