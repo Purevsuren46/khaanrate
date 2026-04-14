@@ -57,29 +57,11 @@ async function statebank() {
 }
 
 // ─── Mongolbank (Puppeteer, last resort) ─────────────────────────
+// Mongolbank official rates — NO Puppeteer (causes OOM on 2GB server)
+// StateBank and XacBank APIs already include mnBankSale (official rates)
 async function mongolbank() {
-  try {
-    const puppeteer = require('puppeteer');
-    const browser = await puppeteer.launch({headless:true, args:['--no-sandbox','--disable-setuid-sandbox','--disable-gpu','--disable-dev-shm-usage']});
-    const page = await browser.newPage();
-    let rateData = null;
-    page.on('response', async r => {
-      if (r.url().includes('currency-rates/data')) {
-        try { rateData = await r.json(); } catch{}
-      }
-    });
-    await page.goto('https://www.mongolbank.mn/mn/currency-rates', {waitUntil:'domcontentloaded', timeout:30000});
-    await new Promise(r => { const c = setInterval(()=>{if(rateData){clearInterval(c);r();}},500); setTimeout(()=>{clearInterval(c);r();},15000); });
-    await browser.close();
-    if (rateData?.success && rateData.data) {
-      const latest = rateData.data[rateData.data.length-1];
-      const p = s => parseFloat((s||'0').replace(/,/g,''));
-      return {name:'MongolBank', mn:'🏛️ Монгол Банк', rates:{
-        usd:p(latest.USD), cny:p(latest.CNY), eur:p(latest.EUR), rub:p(latest.RUB),
-        jpy:p(latest.JPY), krw:p(latest.KRW), gbp:p(latest.GBP)
-      }, date: latest.RATE_DATE};
-    }
-  } catch {}
+  // Try StateBank's mnBankSale as official source (already fetched)
+  // This function is now a no-op — official rates come from buildOfficial()
   return null;
 }
 
