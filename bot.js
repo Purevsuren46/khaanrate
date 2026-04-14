@@ -298,29 +298,44 @@ bot.on('callback_query', async q => {
   const chatId = q.message.chat.id;
   const data = q.data;
 
-  // Calc callbacks
+  // Calc callbacks — use same rich converter logic
   if (data.startsWith('calc_')) {
     bot.answerCallbackQuery(q.id);
     const parts = data.replace('calc_','').split('_');
     const amount = parseFloat(parts[0]);
     const currency = parts[1];
-    // Simulate user message
-    const fakeMsg = {chat:{id:chatId}};
     const banks = await getBanks();
     const official = buildOfficial(banks);
-    if (!official) return;
+    if (!official?.usd) return;
+    
+    const sortedBanks = (cur, dir) => banks
+      .filter(b => b.name !== 'MongolBank' && b.name !== 'StateBank' && b.rates[cur]?.[dir])
+      .sort((a,b) => dir === 'sell' ? a.rates[cur][dir] - b.rates[cur][dir] : b.rates[cur][dir] - a.rates[cur][dir]);
+    
     if (currency === 'mnt') {
-      let result = `💰 <b>₮${fmt(amount)} = </b>\n\n`;
+      let result = `💸 <b>₮${fmt(amount)} =</b>\n\n`;
       for (const c of CURRENCIES) {
         if (!official[c]) continue;
-        result += `${FLAGS[c]} ${fmt(amount / official[c])} ${c.toUpperCase()}\n`;
+        result += `${FLAGS[c]} <b>${fmt(amount / official[c])}</b> ${c.toUpperCase()} — ${NAMES[c]}\n`;
       }
+      if (amount >= 1000000 && amount <= 5000000) result += `\n💼 ≈ Цалин`;
       send(chatId, result);
     } else {
       const rate = official[currency];
       if (!rate) return;
-      const mnt = amount * rate;
-      send(chatId, `💰 <b>${FLAGS[currency]} ${fmt(amount)} ${currency.toUpperCase()} = ₮${fmt(mnt)}</b>\n\n🧮 Өөр хэмжээ: <code>${amount} ${currency}</code>`);
+      const mntAmount = amount * rate;
+      const cheapest = sortedBanks(currency, 'sell')[0];
+      const bestBuy = sortedBanks(currency, 'buy')[0];
+      
+      let result = `${FLAGS[currency]} <b>${fmt(amount)} ${currency.toUpperCase()} = ₮${fmt(mntAmount)}</b>\n\n`;
+      result += `🏛️ Албан: ₮${fmt(rate)}/${currency.toUpperCase()}\n`;
+      if (cheapest) {
+        result += `🏆 ${cheapest.mn}: ₮${fmt(cheapest.rates[currency].sell)}/${currency.toUpperCase()} → <b>₮${fmt(amount * cheapest.rates[currency].sell)}</b>\n`;
+      }
+      if (bestBuy) {
+        result += `📈 Зарвал: ${bestBuy.mn} ₮${fmt(bestBuy.rates[currency].buy)}/${currency.toUpperCase()} → ₮${fmt(amount * bestBuy.rates[currency].buy)}`;
+      }
+      send(chatId, result);
     }
     return;
   }
@@ -529,65 +544,182 @@ bot.onText(/\/api_key/, async msg => {
   send(msg.chat.id, `🔑 <b>API түлхүүр үүслээ!</b>\n\n<code>${key}</code>\n\n📋 Төлөвлөгөө: Free (100 хүсэлт/өдөр)\n\n📌 Ашиглах:\n<code>GET https://khaanrate.api/rates?key=${key}</code>\n\n⭐ Pro болгох → /api_pricing`);
 });
 
-// ─── 🧮 Хөрвүүлэх (converter) — MOST USED ────────────────────
+// ─── 🧮 Хөрвүүлэх — ULTIMATE CONVERTER ────────────────────────
 bot.onText(/🧮 Хөрвүүлэх|\/calc|\/convert/, async msg => {
+  const official = await getOfficial();
+  const usdRate = official?.usd || 3573;
+  const cnyRate = official?.cny || 490;
+  
   send(msg.chat.id,
-    `🧮 <b>Валют хөрвүүлэх</b>\n\nДараах бичвэрүүдийн аль нэгийг бичнэ үү:\n\n<code>1000 usd</code> → хэдэн төгрөг\n<code>500000 mnt</code> → хэдэн доллар\n<code>200 cny</code> → хэдэн төгрөг\n<code>3000 eur</code> → хэдэн төгрөг`,
+    `🧮 <b>ХӨРВҮҮЛЭГЧ</b>\n\n` +
+    `Тоо бичээд илгээнэ үү!\n\n` +
+    `💰 <b>Валют → Төгрөг:</b>\n` +
+    `<code>1000 usd</code> • <code>500 cny</code> • <code>50 eur</code>\n\n` +
+    `💸 <b>Төгрөг → Валют:</b>\n` +
+    `<code>1000000 mnt</code>\n\n` +
+    `🔄 <b>Валют → Валют:</b>\n` +
+    `<code>1000 usd cny</code> (доллар → юань)`,
     {reply_markup:{inline_keyboard:[[
-      {text:'🇺🇸 1000 USD → MNT',callback_data:'calc_1000_usd'},
-      {text:'🇨🇳 1000 CNY → MNT',callback_data:'calc_1000_cny'}
+      {text:'💵 Цалин 2 сая',callback_data:'calc_2000000_mnt'},
+      {text:'💵 Цалин 3 сая',callback_data:'calc_3000000_mnt'}
     ],[
-      {text:'🇺🇸 500000 MNT → USD',callback_data:'calc_500000_mnt'},
-      {text:'🇪🇺 1000 EUR → MNT',callback_data:'calc_1000_eur'}
+      {text:'🏠 10,000$',callback_data:'calc_10000_usd'},
+      {text:'🚗 5,000$',callback_data:'calc_5000_usd'}
+    ],[
+      {text:'🏮 50,000¥',callback_data:'calc_50000_cny'},
+      {text:'🎓 2,000€',callback_data:'calc_2000_eur'}
     ]]}}
   );
 });
 
-// Quick calc text handler: "1000 usd" or "500000 mnt"
-bot.onText(/^(\d+)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)$/i, async (msg, match) => {
-  const amount = parseFloat(match[1]);
-  const currency = match[2].toLowerCase();
+// Context references for amounts
+const CONTEXTS = {
+  usd: [
+    [100, 'Хоол'],
+    [500, 'Гар утас'],
+    [1000, 'Түрээс'],
+    [2000, 'Ачаалал'],
+    [3000, 'Цалин (дундаж)'],
+    [5000, 'Автомашин (хянадаг)'],
+    [10000, 'Автомашин / Орон сууц'],
+    [30000, 'Орон сууц'],
+    [50000, 'Арилжааны байр'],
+    [100000, 'Бизнес хөрөнгө оруулалт'],
+  ],
+  cny: [
+    [1000, 'Цахим бараа'],
+    [5000, 'Хувцас'],
+    [10000, 'Тээвэр'],
+    [50000, 'Машин хэсэг'],
+    [100000, 'Бараа тээвэр'],
+    [500000, 'Арилжааны контейнер'],
+  ],
+};
+
+function getAmountContext(amount, currency) {
+  const ctxs = CONTEXTS[currency] || [];
+  for (const [threshold, label] of ctxs) {
+    if (amount <= threshold * 1.5) return label;
+  }
+  return '';
+}
+
+// Smart converter: "1000 usd", "500000 mnt", "100 usd cny"
+bot.onText(/^(\d[\d,.]*)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)(?:\s+(usd|cny|eur|rub|jpy|krw|gbp))?$/i, async (msg, match) => {
+  const amount = parseFloat(match[1].replace(/,/g, ''));
+  const from = match[2].toLowerCase();
+  const to = match[3]?.toLowerCase();
+  
   const banks = await getBanks();
   const official = buildOfficial(banks);
-  if (!official) { send(msg.chat.id, '⚠️ Ханш татаж чадахгүй байна.'); return; }
-
-  if (currency === 'mnt') {
-    // MNT to all currencies
-    let result = `💰 <b>₮${fmt(amount)} = </b>\n\n`;
+  if (!official?.usd) { send(msg.chat.id, '⚠️ Ханш татаж чадахгүй байна'); return; }
+  
+  const sortedBanks = (cur, dir) => banks
+    .filter(b => b.name !== 'MongolBank' && b.name !== 'StateBank' && b.rates[cur]?.[dir])
+    .sort((a,b) => dir === 'sell' ? a.rates[cur][dir] - b.rates[cur][dir] : b.rates[cur][dir] - a.rates[cur][dir]);
+  
+  let result = '';
+  
+  if (from === 'mnt' && !to) {
+    // ─── MNT → ALL currencies ────────────────────────
+    result = `💸 <b>₮${fmt(amount)} =</b>\n\n`;
     for (const c of CURRENCIES) {
       if (!official[c]) continue;
-      result += `${FLAGS[c]} ${fmt(amount / official[c])} ${c.toUpperCase()}\n`;
+      result += `${FLAGS[c]} <b>${fmt(amount / official[c])}</b> ${c.toUpperCase()} — ${NAMES[c]}\n`;
     }
-    send(msg.chat.id, result);
-  } else {
-    // Currency to MNT
-    const rate = official[currency];
-    if (!rate) { send(msg.chat.id, '❌ Тухайн валют олдсонгүй.'); return; }
-    const mnt = amount * rate;
-    // Also show with cheapest bank
-    const sorted = banks.filter(b=>b.name!=='MongolBank'&&b.name!=='StateBank'&&b.rates[currency]?.sell).sort((a,b)=>a.rates[currency].sell-b.rates[currency].sell);
-    const cheapest = sorted[0];
     
-    let result = `💰 <b>${FLAGS[currency]} ${fmt(amount)} ${currency.toUpperCase()} = ₮${fmt(mnt)}</b>\n\n`;
-    result += `🏛️ Албан ханш: ₮${fmt(rate)}\n`;
-    if (cheapest) {
-      const bankMnt = amount * cheapest.rates[currency].sell;
-      result += `🏆 ${cheapest.mn}: ₮${fmt(cheapest.rates[currency].sell)} → <b>₮${fmt(bankMnt)}</b>\n`;
-      const savings = mnt - bankMnt;
-      if (savings > 0) result += `\n💸 Албан ханшаас ${fmt(savings)}₮ хямд авна!`;
+    // Show best bank to SELL foreign currency (get most MNT)
+    const bestUsdBuy = sortedBanks('usd', 'buy')[0];
+    if (bestUsdBuy) {
+      const usdAmt = amount / bestUsdBuy.rates.usd.buy;
+      result += `\n💡 ${bestUsdBuy.mn}-д доллар зарвал хамгийн их төгрөг авна:\n`;
+      result += `   $${fmt(usdAmt)} (₮${fmt(bestUsdBuy.rates.usd.buy)}/$)`;
     }
-    result += `\n\n🧮 Өөр хэмжээ: <code>500 ${currency}</code>`;
-    send(msg.chat.id, result);
+    
+    // Context: what can you buy with this?
+    if (amount >= 1000000 && amount <= 5000000) result += `\n\n💼 ≈ ${fmt(amount/official.usd)}$ цалин`;
+    else if (amount >= 50000000 && amount <= 200000000) result += `\n\n🏠 ≈ Орон сууцны урьдчилгаа`;
+    else if (amount >= 500000000) result += `\n\n🏢 ≈ Бизнес хөрөнгө оруулалт`;
+    
+  } else if (to) {
+    // ─── Currency → Currency (cross rate) ────────────
+    const fromRate = official[from];
+    const toRate = official[to];
+    if (!fromRate || !toRate) { send(msg.chat.id, '❌ Валют олдсонгүй'); return; }
+    const mntAmount = amount * fromRate;
+    const toAmount = mntAmount / toRate;
+    
+    result = `🔄 <b>${fmt(amount)} ${from.toUpperCase()} → ${fmt(toAmount)} ${to.toUpperCase()}</b>\n\n`;
+    result += `${FLAGS[from]} ${fmt(amount)} ${from.toUpperCase()}\n`;
+    result += `↓ × ₮${fmt(fromRate)}/${from.toUpperCase()}\n`;
+    result += `₮${fmt(mntAmount)}\n`;
+    result += `↓ ÷ ₮${fmt(toRate)}/${to.toUpperCase()}\n`;
+    result += `${FLAGS[to]} <b>${fmt(toAmount)} ${to.toUpperCase()}</b>\n`;
+    result += `\n📊 Ханш: 1 ${from.toUpperCase()} = ${fmt(fromRate/toRate)} ${to.toUpperCase()}`;
+    
+  } else {
+    // ─── Currency → MNT (MAIN CONVERTER) ───────────
+    const rate = official[from];
+    if (!rate) { send(msg.chat.id, '❌ Валют олдсонгүй'); return; }
+    const mntAmount = amount * rate;
+    const cheapest = sortedBanks(from, 'sell')[0];
+    const worst = [...sortedBanks(from, 'sell')].pop();
+    const bestBuy = sortedBanks(from, 'buy')[0];
+    const contextLabel = getAmountContext(amount, from);
+    
+    // HEADER with context
+    result = `${FLAGS[from]} <b>${fmt(amount)} ${from.toUpperCase()}`;
+    if (contextLabel) result += ` — ${contextLabel}`;
+    result += `</b>\n\n`;
+    
+    // OFFICIAL
+    result += `🏛️ Албан: ₮${fmt(rate)}/${from.toUpperCase()} → <b>₮${fmt(mntAmount)}</b>\n\n`;
+    
+    // ALL BANKS comparison
+    if (sortedBanks(from, 'sell').length) {
+      result += `🏦 <b>БАНКУУД:</b>\n`;
+      for (const b of sortedBanks(from, 'sell')) {
+        const bankMnt = amount * b.rates[from].sell;
+        const diff = bankMnt - (cheapest ? amount * cheapest.rates[from].sell : mntAmount);
+        const trophy = b === cheapest ? '🏆' : (diff > 0 ? `(+₮${fmt(diff)})` : '');
+        result += `${trophy ? trophy + ' ' : ''}${b.mn}: ₮${fmt(b.rates[from].sell)}/${from.toUpperCase()} → <b>₮${fmt(bankMnt)}</b>\n`;
+      }
+      
+      // SAVINGS
+      if (cheapest && worst && worst.name !== cheapest.name) {
+        const cheapMnt = amount * cheapest.rates[from].sell;
+        const worstMnt = amount * worst.rates[from].sell;
+        const savings = worstMnt - cheapMnt;
+        if (savings > 0) {
+          result += `\n💸 <b>ХЭМНЭЛТ:</b> ${cheapest.mn}-р ${worst.mn}-аас аввал <b>₮${fmt(savings)}</b> хэмнэнэ!\n`;
+          result += `   ${worst.mn}: ₮${fmt(worstMnt)}\n`;
+          result += `   ${cheapest.mn}: ₮${fmt(cheapMnt)}\n`;
+          result += `   ────────\n`;
+          result += `   Хэмнэлт: <b>₮${fmt(savings)}</b> 🎉`;
+        }
+      }
+      
+      // SELL TIP (reverse direction)
+      if (bestBuy) {
+        result += `\n\n📈 <b>ЗАРВАЛ:</b> ${fmt(amount)} ${from.toUpperCase()} → ₮${fmt(amount * bestBuy.rates[from].buy)}`;
+        result += ` (${bestBuy.mn}: ₮${fmt(bestBuy.rates[from].buy)}/${from.toUpperCase()})`;
+      }
+    }
+    
+    // CROSS RATES (what else could you buy?)
+    result += `\n\n🔄 <b>ӨӨР ВАЛЮТААР:</b>\n`;
+    for (const c of CURRENCIES) {
+      if (c === from || !official[c]) continue;
+      result += `${FLAGS[c]} ${fmt(mntAmount / official[c])} ${c.toUpperCase()}\n`;
+    }
+    
+    // QUICK AMOUNTS
+    result += `\n🧮 <b>Хурдан:</b>\n`;
+    result += `<code>${Math.round(amount/2)} ${from}</code> • <code>${Math.round(amount*2)} ${from}</code> • <code>${Math.round(amount*5)} ${from}</code>`;
   }
+  
+  send(msg.chat.id, result);
 });
-
-// Calc callback buttons
-bot.on('callback_query', async q => {
-  // ... existing handler will be extended
-});
-
-// We need to add calc_ callbacks to existing callback handler
-// Let me add them before the existing callback handler
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 
