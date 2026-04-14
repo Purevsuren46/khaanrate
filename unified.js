@@ -293,42 +293,34 @@ async function calculateMortgage({ propertyPrice, downPct, years, salary, curren
 
 function formatMortgage(r) {
   const c = r.currency === 'usd' ? '$' : '₮';
-  let msg = `🏠 <b>ЗЭЭЛИЙН ТООЦОООЛУУР</b>\n\n`;
-  msg += `┌─────────────────────\n`;
-  msg += `│ Үл хөдлөх: <b>${c}${fmt(r.propertyPrice)}</b>\n`;
-  msg += `│ Урьдчилгаа: ${r.downPct}% = ${c}${fmt(r.downPayment)}\n`;
-  msg += `│ Зээлийн дүн: <b>${c}${fmt(r.loanAmount)}</b>\n`;
-  msg += `│ Хугацаа: ${r.years} жил (${r.years * 12} сар)\n`;
-  if (r.salary) msg += `│ Цалин: ₮${fmt(r.salary)}/сар\n`;
-  msg += `└─────────────────────\n\n`;
+  let msg = `🏠 <b>ЗЭЭЛ — САРЫН ТӨЛБӨР</b>\n\n`;
+  msg += `Үл хөдлөх: ${c}${fmt(r.propertyPrice)} | Урьдчилгаа: ${r.downPct}%\n`;
+  msg += `Зээл: <b>${c}${fmt(r.loanAmount)}</b> | ${r.years} жил`;
+  if (r.salary) msg += ` | Цалин: ₮${fmt(r.salary)}`;
+  msg += `\n\n`;
 
   if (!r.banks.length) {
-    return msg + `❌ Таны нөхцөлд зээл олгох банк олдсонгүй.\n💡 Урьдчилгаа нэмэгдүүлэх эсвэл хугацаа уртасгана уу.`;
+    return msg + `❌ Зээл олгох банк олдсонгүй.\n💡 Урьдчилгаа нэмэгдүүлэх эсвэл хугацаа уртасгана уу.`;
   }
 
-  msg += `🏦 <b>БАНК ХАРЬЦУУЛАЛТ:</b>\n\n`;
-  r.banks.forEach((b, i) => {
-    const tag = i === 0 ? '🏆 ' : '   ';
-    const live = b.source === 'api' ? ' 🔴' : '';
-    msg += `${tag}<b>${b.mn}</b>${live}  ${fmtD(b.min,1)}%—${fmtD(b.max,1)}%\n`;
-    msg += `      Сард: <b>${c}${fmt(b.monthlyMin)}</b> — ${c}${fmt(b.monthlyMax)}\n`;
-    msg += `      Нийт: ${c}${fmt(b.totalMin)} — ${c}${fmt(b.totalMax)}\n`;
-    msg += `      Хүү: ${c}${fmt(b.interestMin)} — ${c}${fmt(b.interestMax)}\n`;
-    if (b.fee) msg += `      Шимтгэл: ${fmtD(b.fee,1)}%\n`;
-    if (r.salary) msg += `      Өр: цалингийн ${fmtD(b.debtRatio,0)}% ${b.salaryOK ? '✅' : '⚠️'}\n`;
-    msg += `\n`;
-  });
+  // Show top 5 banks, ONE LINE each
+  const show = r.banks.slice(0, 5);
+  for (const b of show) {
+    const trophy = b === show[0] ? '🏆' : '  ';
+    const live = b.source === 'api' ? '🔴' : '';
+    const ok = r.salary ? (b.salaryOK ? '✅' : '⚠️') : '';
+    let line = `${trophy} ${b.mn}${live}: <b>${c}${fmt(b.monthlyMin)}`;
+    if (b.monthlyMax !== b.monthlyMin) line += `—${c}${fmt(b.monthlyMax)}`;
+    line += `</b>/сар (${fmtD(b.min,1)}—${fmtD(b.max,1)}%)${ok}`;
+    msg += line + '\n';
+  }
 
   const best = r.banks[0];
   const worst = r.banks[r.banks.length - 1];
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `🏆 <b>${best.mn}</b> — сард ${c}${fmt(best.monthlyMin)}\n`;
   if (worst.mn !== best.mn) {
     const save = worst.monthlyMin - best.monthlyMin;
-    msg += `   ${worst.mn}-аас сард ${c}${fmt(save)} хэмнэнэ\n`;
-    msg += `   ${r.years} жилд ${c}${fmt(save * 12 * r.years)} хэмнэлт 🎉\n`;
+    msg += `\n💰 ${best.mn}-р ${r.years} жилд ${c}${fmt(save * 12 * r.years)} хэмнэнэ`;
   }
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   return msg;
 }
 
@@ -357,27 +349,22 @@ async function calculatePersonalLoan({ amount, months, salary }) {
 }
 
 function formatPersonalLoan(r) {
-  let msg = `💳 <b>ХУВИЙН ЗЭЭЛ</b>\n\n`;
-  msg += `┌─────────────────────\n`;
-  msg += `│ Зээл: <b>₮${fmt(r.amount)}</b> ($${fmt(r.amount / r.usdRate)})\n`;
-  msg += `│ Хугацаа: ${r.months} сар\n`;
-  msg += `│ Цалин: ₮${fmt(r.salary)}/сар\n`;
-  msg += `└─────────────────────\n\n`;
+  let msg = `💳 <b>КРЕДИТ — САРЫН ТӨЛБӨР</b>\n\n`;
+  msg += `Зээл: <b>₮${fmt(r.amount)}</b> | ${r.months} сар | Цалин: ₮${fmt(r.salary)}\n\n`;
 
-  if (!r.banks.length) return msg + `❌ Таны цалингаар зээл авах боломжгүй.\n💡 Цалингаа нэмэгдүүлэх эсвэл хэмжээг багасгана уу.`;
+  if (!r.banks.length) return msg + `❌ Таны цалингаар зээл авах боломжгүй.\n💡 Хэмжээг багасгана уу.`;
 
-  r.banks.forEach((b, i) => {
-    const tag = i === 0 ? '🏆 ' : '   ';
-    msg += `${tag}<b>${b.mn}</b>  ${fmtD(b.annual,1)}%/жил\n`;
-    msg += `      Сард: <b>₮${fmt(b.monthly)}</b>\n`;
-    msg += `      Нийт: ₮${fmt(b.total)}\n`;
-    msg += `      Хүү: ₮${fmt(b.interest)}\n\n`;
-  });
+  for (const b of r.banks) {
+    const trophy = b === r.banks[0] ? '🏆' : '  ';
+    msg += `${trophy} ${b.mn}: <b>₮${fmt(b.monthly)}</b>/сар (${fmtD(b.annual,1)}%)\n`;
+  }
 
   const best = r.banks[0];
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `🏆 <b>${best.mn}</b> — сард ₮${fmt(best.monthly)}\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  const worst = r.banks[r.banks.length - 1];
+  if (worst && best.mn !== worst.mn) {
+    const save = worst.monthly * r.months - best.monthly * r.months;
+    msg += `\n💰 ${best.mn}-р ${r.months} сард ₮${fmt(save)} хэмнэнэ`;
+  }
   return msg;
 }
 
@@ -558,36 +545,38 @@ async function formatMortgageRates(currency) {
     ...bankRates.map(r => ({ ...r, source: 'known' }))
   ].sort((a,b) => a.min - b.min);
 
-  let msg = `🏛️ <b>ЗЭЭЛИЙН ХҮҮ — ${isUSD ? 'USD' : 'MNT'}</b>\n`;
-  msg += `🏠 Орон сууц\n\n`;
+  // Separate mortgage vs business
+  const mortgage = allRates.filter(r => !r.isBusiness);
+  const business = allRates.filter(r => r.isBusiness);
 
-  for (const r of allRates) {
-    const live = r.source === 'api' ? ' 🔴' : '';
-    const win = r.min === allRates[0].min ? ' 🏆' : '';
-    const extra = r.title ? ` (${r.title})` : '';
-    const bizTag = r.isBusiness ? ' 🏢' : '';
-    msg += `${r.mn}${live}${win}${bizTag}\n`;
-    msg += `   <b>${fmtD(r.min,1)}%${r.max !== r.min ? ' — ' + fmtD(r.max,1) + '%' : ''}</b>/жил${extra}\n`;
-    msg += `   Хугацаа: ${r.maxYears} жил | Урьдчилгаа: ${r.minDown}%\n`;
-    if (r.fee) msg += `   Шимтгэл: ${fmtD(r.fee,1)}%\n`;
-    msg += `\n`;
+  let msg = `🏠 <b>ИПОТЕКИЙН ХҮҮ (${isUSD ? 'USD' : 'MNT'})</b>\n\n`;
+  for (const r of mortgage) {
+    const live = r.source === 'api' ? '🔴' : '';
+    const win = r.min === mortgage[0]?.min ? '🏆' : '';
+    const extra = r.title ? ` ${r.title}` : '';
+    msg += `${win}${r.mn} ${live} <b>${fmtD(r.min,1)}%${r.max !== r.min ? '—'+fmtD(r.max,1)+'%' : ''}</b>/жил\n`;
+    msg += `   ${r.maxYears} жил | ${r.minDown}% урьдчилгаа${extra}\n`;
   }
 
-  msg += `🏆 Хамгийн хямд: <b>${allRates[0]?.mn}</b> ${fmtD(allRates[0]?.min,1)}%/жил\n`;
-  msg += `🔴 = API-аас татсан бодит хүү`;
+  if (business.length) {
+    msg += `\n🏢 <b>БИЗНЕС ЗЭЭЛ:</b>\n`;
+    for (const r of business) {
+      msg += `${r.mn} <b>${fmtD(r.min,1)}%${r.max !== r.min ? '—'+fmtD(r.max,1)+'%' : ''}</b>/жил\n`;
+    }
+  }
+
+  msg += `\n🏆 Хамгийн хямд: <b>${mortgage[0]?.mn}</b> ${fmtD(mortgage[0]?.min,1)}%/жил`;
   return msg;
 }
 
 function formatPersonalRates() {
   const rates = [...PERSONAL_RATES].sort((a,b) => a.annual - b.annual);
-  let msg = `💳 <b>ХУВИЙН ЗЭЭЛИЙН ХҮҮ</b>\n\n`;
+  let msg = `💳 <b>КРЕДИТИЙН ХҮҮ</b>\n\n`;
   for (const r of rates) {
-    const win = r.annual === rates[0].annual ? ' 🏆' : '';
-    msg += `${r.mn}${win}\n`;
-    msg += `   <b>${fmtD(r.annual,1)}%/жил</b> | Макс ${r.maxMonths} сар\n`;
-    if (r.minSalary) msg += `   Мин. цалин: ₮${fmt(r.minSalary)}\n`;
-    msg += `\n`;
+    const win = r.annual === rates[0].annual ? '🏆' : '   ';
+    msg += `${win} ${r.mn} <b>${fmtD(r.annual,1)}%</b>/жил | ${r.maxMonths} сар\n`;
   }
+  msg += `\n🏆 Хамгийн хямд: ${rates[0].mn} ${fmtD(rates[0].annual,1)}%/жил`;
   return msg;
 }
 
