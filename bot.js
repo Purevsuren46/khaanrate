@@ -4,6 +4,7 @@ const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
 const { fetchAll, buildOfficial, CURRENCIES, CUR_MAP } = require('./bank-rates');
 const { addReferralButtons, businessReport, getAd, postToChannel, BUSINESS_PRICE, BUSINESS_CONTACT } = require('./monetize');
+const { shareText, getTransferAd, adPricingText, BOT_USERNAME, CHANNEL } = require('./revenue');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -114,6 +115,12 @@ async function bestMsg(currency) {
     const d = bestBuy.rates[currency].sell - official[currency];
     msg += `\n💡 Монголбанктай харьцуулалт: ${d>0?'+':''}₮${fmt(d)}`;
   }
+  // Transfer ad for USD
+  if (currency === 'usd') {
+    const tad = getTransferAd();
+    msg += `\n\n${tad.text}`;
+    return { text: msg, url: tad.url, cta: tad.cta };
+  }
   const ad = getAd();
   if (ad) msg += `\n━━━━━━━━━━\n${ad}`;
   return msg;
@@ -179,7 +186,12 @@ bot.onText(/\/compare (.+)/, async (msg,m) => {
 bot.onText(/\/best (.+)/, async (msg,m) => {
   const c = m[1].toLowerCase().trim();
   if (!CURRENCIES.includes(c)) { send(msg.chat.id,'❌'); return; }
-  send(msg.chat.id, await bestMsg(c));
+  const result = await bestMsg(c);
+  if (typeof result === 'object' && result.url) {
+    send(msg.chat.id, result.text, {reply_markup:{inline_keyboard:[[{text:result.cta, url:result.url}]]}});
+  } else {
+    send(msg.chat.id, result);
+  }
 });
 
 bot.onText(/🔔 Анхааруулга/, msg => {
@@ -210,8 +222,19 @@ bot.onText(/\/alerts/, async msg => {
 });
 
 bot.onText(/❓ Тусламж|\/help/, msg => {
-  send(msg.chat.id, '❓ <b>Тусламж</b>\n\n📊 Ханш — Монголбанк + 3 банк\n🏦 /banks — харьцуулалт\n/alert USD 3580\n/alerts\n/best USD\n/report — бизнес тайлан');
+  send(msg.chat.id, '❓ <b>Тусламж</b>\n\n📊 Ханш — Монголбанк + 3 банк\n🏦 /banks — харьцуулалт\n/alert USD 3580\n/alerts\n/best USD\n/report — бизнес тайлан\n/share — найздаа илгээх\n/ads — зар сурталчилгаа');
 });
+
+// ─── Share (viral growth) ────────────────────────────────────────
+bot.onText(/\/share/, msg => {
+  const text = shareText(msg.chat.id);
+  send(msg.chat.id, text, {reply_markup:{inline_keyboard:[[
+    {text:'📤 Найздаа илгээх', url:`https://t.me/share/url?url=${encodeURIComponent('https://t.me/KhaanRateBot?start=ref'+msg.chat.id)}&text=${encodeURIComponent('💰 Ханшаа шалгах хамгийн хялбар арга!')}`}
+  ]]}});
+});
+
+// ─── Ads pricing (sell ad space) ────────────────────────────────
+bot.onText(/\/ads/, msg => { send(msg.chat.id, adPricingText()); });
 
 bot.on('callback_query', async q => {
   const chatId = q.message.chat.id;
