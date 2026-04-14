@@ -111,8 +111,21 @@ async function getOfficialRates() {
 
 async function getBankRates() {
   const now = Date.now();
-  if (cachedBankRates && now - cachedBankAt < 300000) return cachedBankRates;
+  if (cachedBankRates && now - cachedBankAt < 3600000) return cachedBankRates; // 1hr cache
 
+  try {
+    const { fetchAllBanks, fetchGolomt } = require('./bank-scraper');
+    const liveRates = await fetchAllBanks();
+    if (liveRates && liveRates.length > 0) {
+      cachedBankRates = liveRates;
+      cachedBankAt = now;
+      return cachedBankRates;
+    }
+  } catch (err) {
+    console.error('Live bank scrape error:', err.message);
+  }
+
+  // Fallback to Heroku API
   try {
     const { data } = await axios.get(`${BANKS_API}/rates/latest`, { timeout: 15000 });
     cachedBankRates = data;

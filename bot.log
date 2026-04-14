@@ -1,16 +1,3 @@
 🦁 KhaanRate bot is running...
 📡 Supabase: connected
 🏦 Bank API: https://mongolian-bank-exchange-rate-6620c122ff22.herokuapp.com
-Unhandled rejection Error: ETELEGRAM: 400 Bad Request: query is too old and response timeout expired or query ID is invalid
-    at /tmp/khaanrate/node_modules/node-telegram-bot-api/src/telegram.js:316:15
-    at tryCatcher (/tmp/khaanrate/node_modules/bluebird/js/release/util.js:16:23)
-    at Promise._settlePromiseFromHandler (/tmp/khaanrate/node_modules/bluebird/js/release/promise.js:547:31)
-    at Promise._settlePromise (/tmp/khaanrate/node_modules/bluebird/js/release/promise.js:604:18)
-    at Promise._settlePromise0 (/tmp/khaanrate/node_modules/bluebird/js/release/promise.js:649:10)
-    at Promise._settlePromises (/tmp/khaanrate/node_modules/bluebird/js/release/promise.js:729:18)
-    at _drainQueueStep (/tmp/khaanrate/node_modules/bluebird/js/release/async.js:93:12)
-    at _drainQueue (/tmp/khaanrate/node_modules/bluebird/js/release/async.js:86:9)
-    at Async._drainQueues (/tmp/khaanrate/node_modules/bluebird/js/release/async.js:102:5)
-    at Async.drainQueues (/tmp/khaanrate/node_modules/bluebird/js/release/async.js:15:14)
-    at process.processImmediate (node:internal/timers:484:21)
-📊 Mongolbank rates loaded: 2026-04-13
