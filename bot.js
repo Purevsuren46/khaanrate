@@ -13,7 +13,7 @@ const BANKS_API = 'https://mongolian-bank-exchange-rate-6620c122ff22.herokuapp.c
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-// ─── Bank names in Mongolian ────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────
 const BANK_NAMES = {
   KhanBank: '🦁 Хаан Банк',
   GolomtBank: '🏦 Голомт Банк',
@@ -30,7 +30,6 @@ const BANK_NAMES = {
   MongolBank: '🏛️ Монгол Банк',
 };
 
-const PRIORITY_BANKS = ['KhanBank', 'GolomtBank', 'TDBM', 'XacBank', 'MongolBank'];
 const PRIORITY_CURRENCIES = ['usd', 'cny', 'eur', 'rub', 'jpy', 'krw', 'gbp'];
 const CURRENCY_FLAGS = { usd: '🇺🇸', cny: '🇨🇳', eur: '🇪🇺', rub: '🇷🇺', jpy: '🇯🇵', krw: '🇰🇷', gbp: '🇬🇧' };
 
@@ -53,43 +52,31 @@ async function getBankRates() {
   }
 }
 
-// Get best rates across all banks for a currency
 function getBestRates(bankRates, currency) {
   const results = [];
   for (const bank of bankRates) {
     if (!bank.rates || !bank.rates[currency]) continue;
     const r = bank.rates[currency];
-    // Use cash rates; skip if 0
     if (r.cash && r.cash.buy > 0 && r.cash.sell > 0) {
-      results.push({
-        bank: bank.bank_name,
-        buy: r.cash.buy,
-        sell: r.cash.sell,
-      });
+      results.push({ bank: bank.bank_name, buy: r.cash.buy, sell: r.cash.sell });
     } else if (r.noncash && r.noncash.buy > 0 && r.noncash.sell > 0) {
-      results.push({
-        bank: bank.bank_name,
-        buy: r.noncash.buy,
-        sell: r.noncash.sell,
-        noncash: true,
-      });
+      results.push({ bank: bank.bank_name, buy: r.noncash.buy, sell: r.noncash.sell, noncash: true });
     }
   }
-  // Sort by best sell (lowest = cheapest to buy currency)
   results.sort((a, b) => a.sell - b.sell);
   return results;
 }
 
-// ─── Format helpers ─────────────────────────────────────────────────
-function escMd(text) {
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+// ─── Format helpers (HTML mode — no parsing issues) ─────────────────
+function escHtml(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function formatOfficialRates(bankRates) {
   const mongolBank = bankRates.find(b => b.bank_name === 'MongolBank');
   if (!mongolBank || !mongolBank.rates) return '📊 Ханшны мэдээлэл одоогоор байхгүй байна.';
 
-  let msg = '📊 *Монголбанкны албан ёсны ханш*\n\n';
+  let msg = '<b>📊 Монголбанкны албан ёсны ханш</b>\n\n';
   for (const code of PRIORITY_CURRENCIES) {
     const r = mongolBank.rates[code];
     if (r) {
@@ -106,7 +93,7 @@ function formatBankComparison(bankRates, currency) {
   if (rates.length === 0) return `❌ ${currency.toUpperCase()} ханш олдсонгүй.`;
 
   const flag = CURRENCY_FLAGS[currency] || '💱';
-  let msg = `${flag} *${currency.toUpperCase()} — Банкуудын харьцуулалт*\n\n`;
+  let msg = `<b>${flag} ${currency.toUpperCase()} — Банкуудын харьцуулалт</b>\n\n`;
   msg += 'Хямд (авах) → Үнэт (зарах)\n\n';
 
   for (let i = 0; i < Math.min(rates.length, 8); i++) {
@@ -146,11 +133,7 @@ async function createAlert(chatId, currency, targetRate, direction) {
   if (!user.is_premium && (user.alert_count || 0) >= 3) return null;
 
   const { data } = await supabase.from('alerts').insert({
-    chat_id: chatId,
-    currency,
-    target_rate: targetRate,
-    direction,
-    active: true,
+    chat_id: chatId, currency, target_rate: targetRate, direction, active: true,
   }).select().single();
 
   await supabase.from('users').update({ alert_count: (user.alert_count || 0) + 1 }).eq('chat_id', chatId);
@@ -167,18 +150,17 @@ async function deleteAlert(chatId, alertId) {
   return true;
 }
 
+// ─── Send helper (HTML parse mode) ─────────────────────────────────
+function send(chatId, text, extra = {}) {
+  extra.parse_mode = 'HTML';
+  return bot.sendMessage(chatId, text, extra);
+}
+
 // ─── Handlers ───────────────────────────────────────────────────────
 
-// /start
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, [
-    '🦁 *KhaanRate — Төгрөгийн ханш*',
-    '',
-    'Монголын 13 банкны ханш харьцуулах, анхааруулга тохируулах.',
-    'Доорх командыг сонгоно уу:',
-  ].join('\n'), {
-    parse_mode: 'Markdown',
+  send(chatId, '🦁 <b>KhaanRate — Төгрөгийн ханш</b>\n\nМонголын 13 банкны ханш харьцуулах, анхааруулга тохируулах.\nДоорх командыг сонгоно уу:', {
     reply_markup: {
       keyboard: [
         [{ text: '📊 Ханш' }, { text: '🏦 Банк харьцуулалт' }],
@@ -191,21 +173,19 @@ bot.onText(/\/start/, (msg) => {
 
   if (supabase) {
     supabase.from('users').upsert({
-      chat_id: chatId,
-      username: msg.chat.username,
-      first_name: msg.chat.first_name,
-      language: 'mn',
+      chat_id: chatId, username: msg.chat.username,
+      first_name: msg.chat.first_name, language: 'mn',
     }, { onConflict: 'chat_id' }).then(() => {});
   }
 });
 
-// 📊 Ханш — Official rates
+// 📊 Ханш
 bot.onText(/📊 Ханш|\/rate/, async (msg) => {
   const bankRates = await getBankRates();
-  bot.sendMessage(msg.chat.id, formatOfficialRates(bankRates), { parse_mode: 'Markdown' });
+  send(msg.chat.id, formatOfficialRates(bankRates));
 });
 
-// 🏦 Банк харьцуулалт — Bank comparison
+// 🏦 Банк харьцуулалт
 bot.onText(/🏦 Банк харьцуулалт/, (msg) => {
   bot.sendMessage(msg.chat.id, '💱 Харьцуулах валют сонгоно уу:', {
     reply_markup: {
@@ -219,32 +199,32 @@ bot.onText(/🏦 Банк харьцуулалт/, (msg) => {
   });
 });
 
-// /compare command
+// /compare
 bot.onText(/\/compare (.+)/, async (msg, match) => {
   const currency = match[1].toLowerCase().trim();
   if (!PRIORITY_CURRENCIES.includes(currency)) {
-    bot.sendMessage(msg.chat.id, `❌ Тийм валют байхгүй. Боломжит: ${PRIORITY_CURRENCIES.map(c => c.toUpperCase()).join(', ')}`);
+    send(msg.chat.id, `❌ Тийм валют байхгүй. Боломжит: ${PRIORITY_CURRENCIES.map(c => c.toUpperCase()).join(', ')}`);
     return;
   }
   const bankRates = await getBankRates();
-  bot.sendMessage(msg.chat.id, formatBankComparison(bankRates, currency), { parse_mode: 'Markdown' });
+  send(msg.chat.id, formatBankComparison(bankRates, currency));
 });
 
-// Handle comparison callbacks
+// Callbacks
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
 
-  // Bank comparison callbacks
+  // Bank comparison
   if (query.data.startsWith('compare_')) {
     const currency = query.data.replace('compare_', '');
     const bankRates = await getBankRates();
     const msg = formatBankComparison(bankRates, currency);
     bot.answerCallbackQuery(query.id);
-    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+    send(chatId, msg);
     return;
   }
 
-  // Premium purchase
+  // Buy premium
   if (query.data === 'buy_premium') {
     try {
       await bot.sendInvoice(chatId, {
@@ -258,7 +238,7 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id, { text: 'Төлбөрийн нэхэмжилхэл илгээгдлээ!' });
     } catch (err) {
       bot.answerCallbackQuery(query.id, { text: 'Төлбөр хийх боломжгүй' });
-      bot.sendMessage(chatId, '💳 Төлбөрийн систем удахан холбогдох байна. Одоогоор тестээр премиум авах:', {
+      send(chatId, '💳 Төлбөрийн систем удахан холбогдох байна. Одоогоор тестээр премиум авах:', {
         reply_markup: {
           inline_keyboard: [[{ text: '✅ Премиум авах (тест)', callback_data: 'test_premium' }]],
         },
@@ -271,76 +251,64 @@ bot.on('callback_query', async (query) => {
   if (query.data === 'test_premium') {
     if (supabase) {
       await supabase.from('users').upsert({
-        chat_id: chatId,
-        is_premium: true,
-        premium_since: new Date().toISOString(),
+        chat_id: chatId, is_premium: true, premium_since: new Date().toISOString(),
       }, { onConflict: 'chat_id' });
     }
     bot.answerCallbackQuery(query.id, { text: '✅ Премиум идэвхжлэө!' });
-    bot.sendMessage(chatId, '👑 Премиум эрх идэвхжлээ! 🎉\n\nХязгааргүй анхааруулга үүсгэх боломжтой боллоо!');
+    send(chatId, '👑 Премиум эрх идэвхжлээ! 🎉\n\nХязгааргүй анхааруулга үүсгэх боломжтой боллоо!');
     return;
   }
 
-  // Delete alert callback
+  // Delete alert
   if (query.data.startsWith('delete_alert_')) {
     const alertId = query.data.replace('delete_alert_', '');
     await deleteAlert(chatId, alertId);
     bot.answerCallbackQuery(query.id, { text: '🗑️ Анхааруулга устгагдлаа' });
-    bot.sendMessage(chatId, '✅ Анхааруулга устгагдлаа.');
+    send(chatId, '✅ Анхааруулга устгагдлаа.');
     return;
   }
 });
 
 // 🔔 Анхааруулга
 bot.onText(/🔔 Анхааруулга/, (msg) => {
-  bot.sendMessage(msg.chat.id, [
-    '🔔 *Анхааруулга тохируулах*',
-    '',
-    'Ханш хэдэн төгрөгт хүрэхэд анхааруулах вэ?',
-    '',
-    '_Жишээ:_',
-    '/alert USD 3580 — USD 3580-д хүрэхэд',
-    '/alert CNY below 505 — CNY 505-аас доош унахад',
-    '',
-    '/alerts — одоогийн анхааруулгууд',
-  ].join('\n'), { parse_mode: 'Markdown' });
+  send(msg.chat.id, '🔔 <b>Анхааруулга тохируулах</b>\n\nХанш хэдэн төгрөгт хүрэхэд анхааруулах вэ?\n\n<b>Жишээ:</b>\n/alert USD 3580 — USD 3580-д хүрэхэд\n/alert CNY below 505 — CNY 505-аас доош унахад\n\n/alerts — одоогийн анхааруулгууд');
 });
 
-// /alert command
+// /alert
 bot.onText(/\/alert (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const input = match[1].toUpperCase().trim();
 
-  const parsed = input.match(/^(USD|CNY|EUR|RUB|JPY|KRW|GBP)\s+(above|below)?\s*(\d+\.?\d*)$/i);
+  const parsed = input.match(/^(USD|CNY|EUR|RUB|JPY|KRW|GBP)\s+(ABOVE|BELOW)?\s*(\d+\.?\d*)$/i);
   if (!parsed) {
-    bot.sendMessage(chatId, '❌ Буруу формат. Жишээ: /alert USD 3580');
+    send(chatId, '❌ Буруу формат. Жишээ: /alert USD 3580');
     return;
   }
 
   const [, currency, dir, rateStr] = parsed;
-  const direction = dir === 'below' ? 'below' : 'above';
+  const direction = (dir || 'above').toLowerCase();
   const targetRate = parseFloat(rateStr);
 
   const alert = await createAlert(chatId, currency, targetRate, direction);
   if (!alert) {
-    bot.sendMessage(chatId, '⚠️ Үнэгүй эрхээр 3 анхааруулга үүсгэх боломжтой. Премиум эрх авах: /premium');
+    send(chatId, '⚠️ Үнэгүй эрхээр 3 анхааруулга үүсгэх боломжтой. Премиум эрх авах: /premium');
     return;
   }
 
   const flag = CURRENCY_FLAGS[currency.toLowerCase()] || '💱';
   const dirMn = direction === 'above' ? 'дээш' : 'доош';
-  bot.sendMessage(chatId, `✅ Анхааруулга үүслээ!\n${flag} ${currency} ${dirMn} ₮${targetRate.toLocaleString()} хүрэхэд анхааруулна.`);
+  send(chatId, `✅ Анхааруулга үүслээ!\n${flag} ${currency} ${dirMn} ₮${targetRate.toLocaleString()} хүрэхэд анхааруулна.`);
 });
 
-// /alerts — list active alerts
+// /alerts
 bot.onText(/\/alerts/, async (msg) => {
   const alerts = await getAlerts(msg.chat.id);
   if (alerts.length === 0) {
-    bot.sendMessage(msg.chat.id, 'Анхааруулга байхгүй байна. /alert командыг ашиглана уу.');
+    send(msg.chat.id, 'Анхааруулга байхгүй байна. /alert командыг ашиглана уу.');
     return;
   }
 
-  let text = '🔔 *Таны анхааруулгууд:*\n\n';
+  let text = '🔔 <b>Таны анхааруулгууд:</b>\n\n';
   const buttons = [];
   for (const a of alerts) {
     const flag = CURRENCY_FLAGS[a.currency.toLowerCase()] || '💱';
@@ -349,10 +317,7 @@ bot.onText(/\/alerts/, async (msg) => {
     buttons.push([{ text: `🗑️ ${a.currency} ${dir} ₮${a.target_rate.toLocaleString()}`, callback_data: `delete_alert_${a.id}` }]);
   }
 
-  bot.sendMessage(msg.chat.id, text, {
-    parse_mode: 'Markdown',
-    reply_markup: { inline_keyboard: buttons },
-  });
+  send(msg.chat.id, text, { reply_markup: { inline_keyboard: buttons } });
 });
 
 // 👑 Премиум
@@ -361,21 +326,11 @@ bot.onText(/👑 Премиум|\/premium/, async (msg) => {
   const user = await getUser(chatId);
 
   if (user.is_premium) {
-    bot.sendMessage(chatId, '👑 Таны премиум эрх идэвхтэй байна!');
+    send(chatId, '👑 Таны премиум эрх идэвхтэй байна!');
     return;
   }
 
-  bot.sendMessage(chatId, [
-    '👑 *Премиум эрх*',
-    '',
-    '✅ Хязгааргүй анхааруулга',
-    '✅ Өдөр тутмын тайлан',
-    '✅ Банк хооронд харьцуулалт',
-    '✅ Түүхэн ханшны мэдээлэл',
-    '',
-    '💰 ₮9,900/сар (~149 ⭐)',
-  ].join('\n'), {
-    parse_mode: 'Markdown',
+  send(chatId, '👑 <b>Премиум эрх</b>\n\n✅ Хязгааргүй анхааруулга\n✅ Өдөр тутмын тайлан\n✅ Банк хоорнд харьцуулалт\n✅ Түүхэн ханшны мэдээлэл\n\n💰 ₮9,900/сар (~149 ⭐)', {
     reply_markup: {
       inline_keyboard: [[{ text: '👑 Премиум эрх авах', callback_data: 'buy_premium' }]],
     },
@@ -384,61 +339,79 @@ bot.onText(/👑 Премиум|\/premium/, async (msg) => {
 
 // ❓ Тусламж
 bot.onText(/❓ Тусламж|\/help/, (msg) => {
-  bot.sendMessage(msg.chat.id, [
-    '❓ *Тусламж*',
-    '',
-    '📊 *Ханш* — Монголбанкны албан ёсны ханш',
-    '🏦 *Банк харьцуулалт* — 13 банкны ханш харьцуулах',
-    '/compare USD — Текстээр харьцуулах',
-    '/alert USD 3580 — Анхааруулга тохируулах',
-    '/alerts — Анхааруулгууд харах, устгах',
-    '/premium — Премиум эрх',
-    '/history USD — 7 хоногийн ханш (премиум)',
-    '',
-    '💬 Санал хүсэлт: @khaanrate_support',
-  ].join('\n'), { parse_mode: 'Markdown' });
+  send(msg.chat.id, '❓ <b>Тусламж</b>\n\n📊 <b>Ханш</b> — Монголбанкны албан ёсны ханш\n🏦 <b>Банк харьцуулалт</b> — 13 банкны ханш харьцуулах\n/compare USD — Текстээр харьцуулах\n/alert USD 3580 — Анхааруулга тохируулах\n/alerts — Анхааруулгууд харах, устгах\n/best USD — Хамгийн хямд банк олох\n/history USD — 7 хоногийн ханш (премиум)\n/premium — Премиум эрх\n\n💬 Санал хүсэлт: @khaanrate_support');
 });
 
-// /history — Rate history (premium)
+// /best
+bot.onText(/\/best (.+)/, async (msg, match) => {
+  const currency = match[1].toLowerCase().trim();
+  if (!PRIORITY_CURRENCIES.includes(currency)) {
+    send(msg.chat.id, `❌ Тийм валют байхгүй. Боломжит: ${PRIORITY_CURRENCIES.map(c => c.toUpperCase()).join(', ')}`);
+    return;
+  }
+
+  const bankRates = await getBankRates();
+  const rates = getBestRates(bankRates, currency);
+  if (rates.length === 0) {
+    send(msg.chat.id, `❌ ${currency.toUpperCase()} ханш олдсонгүй.`);
+    return;
+  }
+
+  const flag = CURRENCY_FLAGS[currency] || '💱';
+  const cheapest = rates[0];
+  const bestName = BANK_NAMES[cheapest.bank] || cheapest.bank;
+  const mostExpensive = rates[rates.length - 1];
+  const worstName = BANK_NAMES[mostExpensive.bank] || mostExpensive.bank;
+
+  let text = `${flag} <b>${currency.toUpperCase()} — Шилдэг санал</b>\n\n`;
+  text += `🟢 Валют хямд авах: ${bestName}\n  ₮${cheapest.sell.toLocaleString()}\n\n`;
+  text += `🔴 Валют үнэт зарах: ${worstName}\n  ₮${mostExpensive.buy.toLocaleString()}\n\n`;
+
+  if (rates.length >= 2) {
+    const spread = mostExpensive.sell - cheapest.sell;
+    text += `💡 Банк хооронд зөрүү: ₮${spread.toLocaleString()}`;
+  }
+
+  send(msg.chat.id, text);
+});
+
+// /history (premium)
 bot.onText(/\/history (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const user = await getUser(chatId);
   const currency = match[1].toLowerCase().trim();
 
   if (!user.is_premium) {
-    bot.sendMessage(chatId, '👑 /history нь премиум эрх шаардана. /premium');
+    send(chatId, '👑 /history нь премиум эрх шаардана. /premium');
     return;
   }
 
   if (!PRIORITY_CURRENCIES.includes(currency)) {
-    bot.sendMessage(chatId, `❌ Тийм валют байхгүй. Боломжит: ${PRIORITY_CURRENCIES.map(c => c.toUpperCase()).join(', ')}`);
+    send(chatId, `❌ Тийм валют байхгүй. Боломжит: ${PRIORITY_CURRENCIES.map(c => c.toUpperCase()).join(', ')}`);
     return;
   }
 
   try {
     const { data } = await axios.get(`${BANKS_API}/rates/bank/MongolBank`, { timeout: 10000 });
     if (!data || data.length === 0) {
-      bot.sendMessage(chatId, '❌ Түүхэн мэдээлэл олдсонгүй.');
+      send(chatId, '❌ Түүхэн мэдээлэл олдсонгүй.');
       return;
     }
 
-    // Get last 7 entries
     const recent = data.slice(-7).reverse();
     const flag = CURRENCY_FLAGS[currency] || '💱';
-    let text = `${flag} *${currency.toUpperCase()} — Сүүлийн 7 хоног*\n\n`;
+    let text = `${flag} <b>${currency.toUpperCase()} — Сүүлийн 7 хоног</b>\n\n`;
 
     for (const entry of recent) {
-      const date = entry.date;
       const r = entry.rates[currency];
       if (r) {
         const rate = r.cash ? r.cash.buy : (r.noncash ? r.noncash.buy : 0);
         if (rate > 0) {
-          text += `📅 ${date}: ₮${rate.toLocaleString()}\n`;
+          text += `📅 ${entry.date}: ₮${rate.toLocaleString()}\n`;
         }
       }
     }
 
-    // Calculate trend
     if (recent.length >= 2) {
       const first = recent[recent.length - 1];
       const last = recent[0];
@@ -452,43 +425,10 @@ bot.onText(/\/history (.+)/, async (msg, match) => {
       }
     }
 
-    bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    send(chatId, text);
   } catch (err) {
-    bot.sendMessage(chatId, '❌ Түүхэн мэдээлэл татаж чадсангүй.');
+    send(chatId, '❌ Түүхэн мэдээлэл татаж чадсангүй.');
   }
-});
-
-// /best — Find best bank to buy/sell a currency
-bot.onText(/\/best (.+)/, async (msg, match) => {
-  const currency = match[1].toLowerCase().trim();
-  if (!PRIORITY_CURRENCIES.includes(currency)) {
-    bot.sendMessage(msg.chat.id, `❌ Тийм валют байхгүй. Боломжит: ${PRIORITY_CURRENCIES.map(c => c.toUpperCase()).join(', ')}`);
-    return;
-  }
-
-  const bankRates = await getBankRates();
-  const rates = getBestRates(bankRates, currency);
-  if (rates.length === 0) {
-    bot.sendMessage(msg.chat.id, `❌ ${currency.toUpperCase()} ханш олдсонгүй.`);
-    return;
-  }
-
-  const flag = CURRENCY_FLAGS[currency] || '💱';
-  const cheapest = rates[0];
-  const bestSell = BANK_NAMES[cheapest.bank] || cheapest.bank;
-  const mostExpensive = rates[rates.length - 1];
-  const worstSell = BANK_NAMES[mostExpensive.bank] || mostExpensive.bank;
-
-  let text = `${flag} *${currency.toUpperCase()} — Шилдэг санал*\n\n`;
-  text += `🟢 Валют хямд авах: ${bestSell}\n  ₮${cheapest.sell.toLocaleString()}\n\n`;
-  text += `🔴 Валют үнэт зарах: ${worstSell}\n  ₮${mostExpensive.buy.toLocaleString()}\n\n`;
-
-  if (rates.length >= 2) {
-    const spread = mostExpensive.sell - cheapest.sell;
-    text += `💡 Банк хооронд зөрүү: ₮${spread.toLocaleString()}`;
-  }
-
-  bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
 });
 
 // Payment handlers
@@ -500,14 +440,13 @@ bot.on('successful_payment', async (msg) => {
   const chatId = msg.chat.id;
   if (supabase) {
     await supabase.from('users').update({
-      is_premium: true,
-      premium_since: new Date().toISOString(),
+      is_premium: true, premium_since: new Date().toISOString(),
     }).eq('chat_id', chatId);
   }
-  bot.sendMessage(chatId, '👑 Премиум эрх идэвхжлээ! Баярлалаа! 🎉');
+  send(chatId, '👑 Премиум эрх идэвхжлээ! Баярлалаа! 🎉');
 });
 
-// ─── Alert checker (every 5 min) ──────────────────────────────────
+// ─── Alert checker (every 5 min) ─────────────────────────────────────
 async function checkAlerts() {
   if (!supabase) return;
   const bankRates = await getBankRates();
@@ -532,10 +471,7 @@ async function checkAlerts() {
     if (triggered) {
       const flag = CURRENCY_FLAGS[cur] || '💱';
       const dir = alert.direction === 'above' ? 'дээш' : 'доош';
-      bot.sendMessage(alert.chat_id,
-        `🔔 *Анхааруулга!*\n${flag} ${alert.currency} ${dir} ₮${alert.target_rate.toLocaleString()} хүрлээ!\nОдоогийн ханш: ₮${currentRate.toLocaleString()}`,
-        { parse_mode: 'Markdown' }
-      );
+      send(alert.chat_id, `🔔 <b>Анхааруулга!</b>\n${flag} ${alert.currency} ${dir} ₮${alert.target_rate.toLocaleString()} хүрлээ!\nОдоогийн ханш: ₮${currentRate.toLocaleString()}`);
       await supabase.from('alerts').update({ active: false, triggered_at: new Date().toISOString() }).eq('id', alert.id);
     }
   }
@@ -543,20 +479,20 @@ async function checkAlerts() {
 
 setInterval(checkAlerts, 300000);
 
-// ─── Daily report for premium users ─────────────────────────────────
+// ─── Daily report ────────────────────────────────────────────────────
 async function sendDailyReport() {
   if (!supabase) return;
   const bankRates = await getBankRates();
   const { data: premiumUsers } = await supabase.from('users').select('chat_id').eq('is_premium', true);
   if (!premiumUsers || premiumUsers.length === 0) return;
 
-  const report = `📊 *Өдрийн ханшны тайлан*\n\n${formatOfficialRates(bankRates)}\n\n💸 Хамгийн хямд USD: ${(() => {
-    const usdRates = getBestRates(bankRates, 'usd');
-    return usdRates.length > 0 ? `${BANK_NAMES[usdRates[0].bank]} ₮${usdRates[0].sell.toLocaleString()}` : '-';
-  })()}\n\n_KhaanRate Premium_`;
+  const usdRates = getBestRates(bankRates, 'usd');
+  const bestUsd = usdRates.length > 0 ? `${BANK_NAMES[usdRates[0].bank]} ₮${usdRates[0].sell.toLocaleString()}` : '-';
+
+  const report = `<b>📊 Өдрийн ханшны тайлан</b>\n\n${formatOfficialRates(bankRates)}\n\n💸 Хамгийн хямд USD: ${bestUsd}\n\n<i>KhaanRate Premium</i>`;
 
   for (const user of premiumUsers) {
-    bot.sendMessage(user.chat_id, report, { parse_mode: 'Markdown' }).catch(() => {});
+    send(user.chat_id, report).catch(() => {});
   }
 }
 
