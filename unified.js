@@ -27,7 +27,7 @@ async function convertCurrency(amount, fromCurrency, toCurrency) {
   if (!official?.usd) return null;
 
   const sortedBanks = (cur, dir) =>
-    banks.filter(b => b.name !== 'MongolBank' && b.name !== 'StateBank' && b.rates[cur]?.[dir])
+    banks.filter(b => b.name !== 'MongolBank' && b.rates[cur]?.[dir])
       .sort((a,b) => dir === 'sell' ? a.rates[cur][dir] - b.rates[cur][dir] : b.rates[cur][dir] - a.rates[cur][dir]);
 
   if (fromCurrency === 'mnt' && !toCurrency) {
@@ -76,14 +76,14 @@ function formatConversion(r) {
   if (!r) return '⚠️ Ханш татаж чадахгүй байна';
 
   if (r.type === 'mnt_to_all') {
-    let msg = `💸 <b>₮${fmt(r.amount)} =</b>\n\n`;
+    let msg = `💸 <b>₮${fmt(r.amount)}</b>\n\n`;
     for (const c of CURRENCIES) {
       if (!r[c]) continue;
-      msg += `${FLAGS[c]} <b>${fmt(r[c])}</b> ${c.toUpperCase()} — ${NAMES[c]}\n`;
+      msg += `${FLAGS[c]} <b>${fmt(r[c])} ${c.toUpperCase()}</b>\n`;
     }
     if (r.banks?.length) {
       const best = r.banks[0];
-      msg += `\n💡 ${best.mn}-д доллар зарвал хамгийн их төгрөг авна (₮${fmt(best.rates.usd.buy)}/$)`;
+      msg += `\n📈 ${best.mn}-д $ зарвал ₮${fmt(best.rates.usd.buy)}/$ авна`;
     }
     return msg;
   }
@@ -101,42 +101,34 @@ function formatConversion(r) {
 
   if (r.type === 'foreign_to_mnt') {
     const c = r.currency;
-    let msg = `${FLAGS[c]} <b>${fmt(r.amount)} ${c.toUpperCase()} = ₮${fmt(r.mntAmount)}</b>`;
-    msg += ` (Албан ₮${fmt(r.officialRate)})\n\n`;
+    const cheapest = r.allSellBanks?.[0];
+    const cheapMnt = cheapest ? r.amount * cheapest.rates[c].sell : r.mntAmount;
 
-    // Bank comparison — BUY (you buy foreign = bank sells)
+    // HEADER — the answer
+    let msg = `${FLAGS[c]} <b>${fmt(r.amount)} ${c.toUpperCase()} = ₮${fmt(cheapMnt)}</b>\n`;
+    msg += `Албан: ₮${fmt(r.officialRate)}/${c.toUpperCase()}\n\n`;
+
+    // Bank comparison — ONE LINE each
     if (r.allSellBanks?.length) {
-      msg += `🏦 <b>АВАХ үнэ (та валют авна):</b>\n`;
+      msg += `🏦 Авах үнэ:\n`;
       r.allSellBanks.forEach((b, i) => {
         const bankMnt = r.amount * b.rates[c].sell;
-        const tag = i === 0 ? '🏆 ' : '   ';
-        msg += `${tag}${b.mn}: ₮${fmt(b.rates[c].sell)}/$ → <b>₮${fmt(bankMnt)}</b>\n`;
+        const icon = i === 0 ? '🏆' : '  ';
+        msg += `${icon} ${b.mn}: <b>₮${fmt(bankMnt)}</b> (₮${fmt(b.rates[c].sell)}/${c.toUpperCase()})\n`;
       });
     }
 
     // Savings
     if (r.allSellBanks?.length >= 2) {
-      const cheap = r.allSellBanks[0];
       const worst = r.allSellBanks[r.allSellBanks.length - 1];
-      const cheapTotal = r.amount * cheap.rates[c].sell;
-      const worstTotal = r.amount * worst.rates[c].sell;
-      const savings = worstTotal - cheapTotal;
-      if (savings > 0) {
-        msg += `\n💸 ${cheap.mn}-р ${worst.mn}-аас <b>₮${fmt(savings)}</b> хэмнэнэ!\n`;
-      }
+      const savings = r.amount * worst.rates[c].sell - cheapMnt;
+      if (savings > 0) msg += `\n💰 ${cheapest.mn}-р ₮${fmt(savings)} хэмнэнэ!`;
     }
 
-    // SELL direction
+    // Best sell price
     if (r.bestBuy) {
       const sellMnt = r.amount * r.bestBuy.rates[c].buy;
-      msg += `\n📈 <b>Зарах үнэ</b> (${r.bestBuy.mn}): ₮${fmt(r.bestBuy.rates[c].buy)}/$ → ₮${fmt(sellMnt)}`;
-    }
-
-    // Other currencies
-    msg += `\n\n🔄 <b>ӨӨР ВАЛЮТААР:</b>\n`;
-    for (const cc of CURRENCIES) {
-      if (cc === c || !r.official[cc]) continue;
-      msg += `${FLAGS[cc]} ${fmt(r.mntAmount / r.official[cc])} ${cc.toUpperCase()}\n`;
+      msg += `\n📈 Зарах: ${r.bestBuy.mn} → ₮${fmt(sellMnt)}`;
     }
 
     return msg;

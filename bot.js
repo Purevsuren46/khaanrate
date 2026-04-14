@@ -17,11 +17,12 @@ const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 const send = (id, text, opts) => bot.sendMessage(id, text, { parse_mode: 'HTML', ...opts });
 
-// ─── Main menu — 4 BUTTONS, ALL-IN-ONE ───────────────────────────
+// ─── Main menu — CONVERTER-FIRST ────────────────────────────────
 const MAIN_MENU = {
   reply_markup:{keyboard:[
-    [{text:'💵 Ханш'},{text:'🏠 Зээл'}],
-    [{text:'🚗 Машин'},{text:'⚙️ Бусад'}]
+    [{text:'🔄 Хөрвүүлэх'},{text:'💵 Ханш'}],
+    [{text:'🏠 Зээл'},{text:'🚗 Машин'}],
+    [{text:'⚙️ Бусад'}]
   ],resize_keyboard:true}
 };
 
@@ -75,12 +76,12 @@ bot.onText(/\/start/, async msg => {
       greeting += `🏆 Хямд: ${cheapest.mn} ₮${U.fmt(cheapest.rates.usd.sell)} | ${expensive.mn} ₮${U.fmt(expensive.rates.usd.sell)}\n\n`;
     }
   }
-  greeting += `<b>4 товч, бүх зүйл:</b>\n\n`;
-  greeting += `💵 Ханш → харьцуулах + хөрвүүлэх + хүү\n`;
-  greeting += `🏠 Зээл → ипотек + кредит + хүү\n`;
-  greeting += `🚗 Машин → импорт + татвар + зээл\n`;
-  greeting += `⚙️ Бусад → мэдэгдэл + илгээх + дэмжлэг\n\n`;
-  greeting += `Мөн шууд бич: <code>1000 usd</code>`;
+  greeting += `<b>Шууд бич: <code>1000 usd</code></b>\n\n`;
+  greeting += `🔄 Хөрвүүлэх → валют хөрвүүлэх + банк харьцуулах\n`;
+  greeting += `💵 Ханш → хамгийн хямд банк\n`;
+  greeting += `🏠 Зээл → ипотек + кредит\n`;
+  greeting += `🚗 Машин → импорт + татвар\n`;
+  greeting += `⚙️ Бусад → мэдэгдэл + илгээх`;
   send(msg.chat.id, greeting, MAIN_MENU);
   if (supabase) supabase.from('users').upsert({chat_id:msg.chat.id,username:msg.chat.username,first_name:msg.chat.first_name},{onConflict:'chat_id'}).then(()=>{});
 });
