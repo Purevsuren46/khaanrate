@@ -16,15 +16,15 @@ const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 // ─── Mongolian UI ───────────────────────────────────────────────────
 const FLAGS = { USD: '🇺🇸', CNY: '🇨🇳', EUR: '🇪🇺', RUB: '🇷🇺', JPY: '🇯🇵', KRW: '🇰🇷', GBP: '🇬🇧' };
 const MN = {
-  welcome: `🦁 *KhaanRate — Төгрөгийн ханш*\n\nМонголбанкны албан ёсны ханш мэдээлэл.\nЭхлэхийн тулд доорх командыг сонгоно уу:`,
+  welcome: '🦁 *KhaanRate — Төгрөгийн ханш*\n\nМонголбанкны албан ёсны ханш мэдээлэл.\nЭхлэхийн тулд доорх командыг сонгоно уу:',
   rate: '📊 Ханш',
-  alert: '🔔 Анхааруулга тохируулах',
+  alert: '🔔 Анхааруулга',
   premium: '👑 Премиум',
   help: '❓ Тусламж',
   noAlerts: 'Анхааруулга байхгүй байна. Шинээр үүсгэхийн тулд /alert командыг ашиглана уу.',
-  premiumInfo: `👑 *Премиум эрх*\n\n✅ Хязгааргүй анхааруулга\n✅ Өдөр тутмын тайлан\n✅ Банк хооронд харьцуулалт\n✅ Түүхэн ханшны график\n\n💰 ₮{price}/сар`,
+  premiumInfo: '👑 *Премиум эрх*\n\n✅ Хязгааргүй анхааруулга\n✅ Өдөр тутмын тайлан\n✅ Банк хооронд харьцуулалт\n✅ Түүхэн ханшны график\n\n💰 ₮{price}/сар',
   alertCreated: '✅ Анхааруулга амжилттай үүслээ!',
-  alertPrompt: `Ханш хэдэн төгрөгт хүрэхэд анхааруулах вэ?\nЖишээ нь: USD 3400 эсвэл CNY 470`,
+  alertPrompt: 'Ханш хэдэн төгрөгт хүрэхэд анхааруулах вэ?\nЖишээ нь: /alert USD 3400',
   freeLimit: '⚠️ Үнэгүй эрхээр 3 анхааруулга үүсгэх боломжтой. Премиум эрх авах: /premium',
 };
 
@@ -34,17 +34,15 @@ let cachedAt = 0;
 
 async function getRates() {
   const now = Date.now();
-  if (cachedRates && now - cachedAt < 300000) return cachedRates; // 5min cache
+  if (cachedRates && now - cachedAt < 300000) return cachedRates;
 
   try {
-    // Bank of Mongolia daily rate XML endpoint
     const { data } = await axios.get(BANK_OF_MONGOLIA_API, {
       params: { dataType: 'json' },
       timeout: 10000,
       headers: { 'Accept-Language': 'mn' },
     });
 
-    // Parse the response - MongolBank returns structured data
     const rates = {};
     if (Array.isArray(data)) {
       for (const item of data) {
@@ -53,7 +51,6 @@ async function getRates() {
         if (code && rate) rates[code] = rate;
       }
     } else if (data && typeof data === 'object') {
-      // Fallback: try common response shapes
       const items = data.items || data.rates || data.data || [];
       for (const item of items) {
         const code = item.CurrencyCode || item.code || item.currency;
@@ -62,7 +59,6 @@ async function getRates() {
       }
     }
 
-    // Hardcoded fallback with recent approximate rates if API fails
     if (Object.keys(rates).length === 0) {
       rates.USD = 3420;
       rates.CNY = 470;
@@ -77,7 +73,6 @@ async function getRates() {
     cachedAt = now;
     return rates;
   } catch (err) {
-    // Fallback rates
     if (cachedRates) return cachedRates;
     return { USD: 3420, CNY: 470, EUR: 3710, RUB: 38, JPY: 22.5, KRW: 2.5, GBP: 4310 };
   }
@@ -105,12 +100,17 @@ async function createAlert(chatId, currency, targetRate, direction) {
     chat_id: chatId,
     currency,
     target_rate: targetRate,
-    direction, // 'above' or 'below'
+    direction,
     active: true,
   }).select().single();
 
   await supabase.from('users').update({ alert_count: (user.alert_count || 0) + 1 }).eq('chat_id', chatId);
   return data;
+}
+
+// ─── Escape markdown ────────────────────────────────────────────────
+function escMd(text) {
+  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
 }
 
 // ─── Format rates ───────────────────────────────────────────────────
@@ -142,7 +142,6 @@ bot.onText(/\/start/, (msg) => {
     },
   });
 
-  // Register user
   if (supabase) {
     supabase.from('users').upsert({
       chat_id: chatId,
@@ -153,8 +152,8 @@ bot.onText(/\/start/, (msg) => {
   }
 });
 
-// Rate check
-bot.onText(new RegExp(MN.rate), async (msg) => {
+// Rate check via keyboard button
+bot.onText(new RegExp(escMd(MN.rate)), async (msg) => {
   const rates = await getRates();
   bot.sendMessage(msg.chat.id, formatRates(rates), { parse_mode: 'Markdown' });
 });
@@ -165,19 +164,19 @@ bot.onText(/\/rate/, async (msg) => {
   bot.sendMessage(msg.chat.id, formatRates(rates), { parse_mode: 'Markdown' });
 });
 
-// Alert setup
-bot.onText(new RegExp(MN.alert), (msg) => {
-  bot.sendMessage(msg.chat.id, MN.alertPrompt);
+// Alert button — prompt with instructions
+bot.onText(new RegExp(escMd(MN.alert)), (msg) => {
+  bot.sendMessage(msg.chat.id, MN.alertPrompt, { parse_mode: 'Markdown' });
 });
 
+// /alert command — create alert
 bot.onText(/\/alert (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const input = match[1].toUpperCase().trim();
 
-  // Parse: "USD 3400" or "CNY above 480"
   const parsed = input.match(/^(USD|CNY|EUR|RUB|JPY|KRW|GBP)\s+(above|below)?\s*(\d+\.?\d*)$/i);
   if (!parsed) {
-    bot.sendMessage(chatId, '❌ Буруу формат. Жишээ: `/alert USD 3400`', { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, '❌ Буруу формат. Жишээ: /alert USD 3400');
     return;
   }
 
@@ -197,37 +196,106 @@ bot.onText(/\/alert (.+)/, async (msg, match) => {
 });
 
 // Premium
-bot.onText(new RegExp(MN.premium), async (msg) => {
+bot.onText(new RegExp(escMd(MN.premium)), async (msg) => {
   const chatId = msg.chat.id;
   const user = await getUser(chatId);
 
-  let info = MN.premiumInfo.replace('{price}', PREMIUM_PRICE.toLocaleString());
-  if (user.is_premium) info = '👑 Таны премиум эрх идэвхтэй байна!';
+  if (user.is_premium) {
+    bot.sendMessage(chatId, '👑 Таны премиум эрх идэвхтэй байна!');
+    return;
+  }
 
+  const info = MN.premiumInfo.replace('{price}', PREMIUM_PRICE.toLocaleString());
   bot.sendMessage(chatId, info, {
     parse_mode: 'Markdown',
-    reply_markup: user.is_premium ? undefined : {
+    reply_markup: {
       inline_keyboard: [[{
         text: `👑 Премиум эрх авах — ₮${PREMIUM_PRICE.toLocaleString()}/сар`,
-        pay: true,
+        callback_data: 'buy_premium',
+      }]],
+    },
+  });
+});
+
+// Handle premium button callback
+bot.on('callback_query', async (query) => {
+  const chatId = query.message.chat.id;
+
+  if (query.data === 'buy_premium') {
+    // Try Telegram Stars payment first
+    try {
+      await bot.sendInvoice(chatId, {
+        title: 'KhaanRate Премиум',
+        description: 'Хязгааргүй анхааруулга, өдрийн тайлан, банк харьцуулалт',
+        payload: 'premium_monthly',
+        provider_token: '',
+        currency: 'XTR',
+        prices: [{ label: '1 сар', amount: 149 }],
+      });
+      bot.answerCallbackQuery(query.id, { text: 'Төлбөрийн нэхэмжилхэл илгээгдлээ!' });
+    } catch (err) {
+      console.error('Invoice error:', err.message);
+      bot.answerCallbackQuery(query.id, { text: 'Төлбөр хийх боломжгүй' });
+      bot.sendMessage(chatId, '💳 Төлбөрийн систем удахан холбогдох байна. Одоогоор тестээр премиум авах:', {
+        reply_markup: {
+          inline_keyboard: [[{
+            text: '✅ Премиум авах (тест)',
+            callback_data: 'test_premium',
+          }]],
+        },
+      });
+    }
+  }
+
+  // Test premium activation
+  if (query.data === 'test_premium') {
+    if (supabase) {
+      await supabase.from('users').upsert({
+        chat_id: chatId,
+        is_premium: true,
+        premium_since: new Date().toISOString(),
+      }, { onConflict: 'chat_id' });
+    }
+    bot.answerCallbackQuery(query.id, { text: '✅ Премиум идэвхжлэө!' });
+    bot.sendMessage(chatId, '👑 Премиум эрх идэвхжлээ! 🎉\n\nХязгааргүй анхааруулга үүсгэх боломжтой боллоо. /alert командыг ашиглана уу!');
+  }
+});
+
+// /premium command
+bot.onText(/\/premium/, async (msg) => {
+  const chatId = msg.chat.id;
+  const user = await getUser(chatId);
+
+  if (user.is_premium) {
+    bot.sendMessage(chatId, '👑 Таны премиум эрх идэвхтэй байна!');
+    return;
+  }
+
+  const info = MN.premiumInfo.replace('{price}', PREMIUM_PRICE.toLocaleString());
+  bot.sendMessage(chatId, info, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: [[{
+        text: `👑 Премиум эрх авах`,
+        callback_data: 'buy_premium',
       }]],
     },
   });
 });
 
 // Help
-bot.onText(new RegExp(MN.help), (msg) => {
-  bot.sendMessage(msg.chat.id, `
-❓ *Тусламж*
-
-/rate — Одоогийн ханш харах
-/alert USD 3400 — Ханш 3400-д хүрэхэд анхааруулах
-/alerts — Анхааруулгууд харах
-/premium — Премиум эрх
-/help — Тусламж
-
-💬 Санал хүсэлт: @khaanrate_support
-`, { parse_mode: 'Markdown' });
+bot.onText(new RegExp(escMd(MN.help)), (msg) => {
+  bot.sendMessage(msg.chat.id, [
+    '❓ *Тусламж*',
+    '',
+    '/rate — Одоогийн ханш харах',
+    '/alert USD 3400 — Ханш 3400-д хүрэхэд анхааруулах',
+    '/alerts — Анхааруулгууд харах',
+    '/premium — Премиум эрх',
+    '/help — Тусламж',
+    '',
+    '💬 Санал хүсэлт: @khaanrate_support',
+  ].join('\n'), { parse_mode: 'Markdown' });
 });
 
 // /alerts - list active alerts
@@ -246,7 +314,7 @@ bot.onText(/\/alerts/, async (msg) => {
   bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
 });
 
-// Payment (Telegram Stars / native)
+// Payment
 bot.on('pre_checkout_query', (query) => {
   bot.answerPreCheckoutQuery(query.id, true);
 });
@@ -267,7 +335,6 @@ async function checkAlerts() {
   if (!supabase) return;
   const rates = await getRates();
   const { data: alerts } = await supabase.from('alerts').select('*').eq('active', true);
-
   if (!alerts) return;
 
   for (const alert of alerts) {
@@ -290,22 +357,9 @@ async function checkAlerts() {
   }
 }
 
-setInterval(checkAlerts, 300000); // 5 min
-
-// ─── Daily report for premium users ─────────────────────────────────
-async function sendDailyReport() {
-  if (!supabase) return;
-  const rates = await getRates();
-  const { data: premiumUsers } = await supabase.from('users').select('chat_id').eq('is_premium', true);
-  if (!premiumUsers) return;
-
-  const report = `📊 *Өдрийн ханшны тайлан*\n\n${formatRates(rates)}\n_KhaanRate Premium_`;
-
-  for (const user of premiumUsers) {
-    bot.sendMessage(user.chat_id, report, { parse_mode: 'Markdown' }).catch(() => {});
-  }
-}
+setInterval(checkAlerts, 300000);
 
 // ─── Start ──────────────────────────────────────────────────────────
 console.log('🦁 KhaanRate bot is running...');
 console.log('💰 Premium price: ₮' + PREMIUM_PRICE.toLocaleString() + '/month');
+console.log('📡 Supabase:', supabase ? 'connected' : 'not configured');
