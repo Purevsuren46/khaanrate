@@ -14,6 +14,17 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const FX_API = 'https://open.er-api.com/v6/latest/USD';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+bot.on('inline_query', async q => {
+  const banks = await getBanks();
+  const official = buildOfficial(banks);
+  if (!official) { bot.answerInlineQuery(q.id,[]); return; }
+  const results = CURRENCIES.filter(c=>official[c]).map((c,i) => ({
+    type:'article', id:String(i), title:`${FLAGS[c]} ${c.toUpperCase()}: ₮${fmt(official[c])}`,
+    description:`${NAMES[c]} — Албан ханш`,
+    input_message_content:{message_text:`${FLAGS[c]} ${c.toUpperCase()}: <b>₮${fmt(official[c])}</b>\n\n📱 @KhaanRateBot — Ханш шалгах`, parse_mode:'HTML'}
+  }));
+  bot.answerInlineQuery(q.id, results);
+});
 const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 const FLAGS = {usd:'🇺🇸',cny:'🇨🇳',eur:'🇪🇺',rub:'🇷🇺',jpy:'🇯🇵',krw:'🇰🇷',gbp:'🇬🇧'};
@@ -61,7 +72,7 @@ const MAIN_MENU = {
   reply_markup:{keyboard:[
     [{text:'💵 Ханш харах'},{text:'🏦 Банк харьцуулах'}],
     [{text:'🔔 Ханшны мэдэгдэл'},{text:'💸 Мөнгө илгээх'}],
-    [{text:'💼 Цалин бодох'},{text:'❤️ Дэмжлэг'}]
+    [{text:'🧮 Хөрвүүлэх'},{text:'❤️ Дэмжлэг'}]
   ],resize_keyboard:true}
 };
 
@@ -287,6 +298,33 @@ bot.on('callback_query', async q => {
   const chatId = q.message.chat.id;
   const data = q.data;
 
+  // Calc callbacks
+  if (data.startsWith('calc_')) {
+    bot.answerCallbackQuery(q.id);
+    const parts = data.replace('calc_','').split('_');
+    const amount = parseFloat(parts[0]);
+    const currency = parts[1];
+    // Simulate user message
+    const fakeMsg = {chat:{id:chatId}};
+    const banks = await getBanks();
+    const official = buildOfficial(banks);
+    if (!official) return;
+    if (currency === 'mnt') {
+      let result = `💰 <b>₮${fmt(amount)} = </b>\n\n`;
+      for (const c of CURRENCIES) {
+        if (!official[c]) continue;
+        result += `${FLAGS[c]} ${fmt(amount / official[c])} ${c.toUpperCase()}\n`;
+      }
+      send(chatId, result);
+    } else {
+      const rate = official[currency];
+      if (!rate) return;
+      const mnt = amount * rate;
+      send(chatId, `💰 <b>${FLAGS[currency]} ${fmt(amount)} ${currency.toUpperCase()} = ₮${fmt(mnt)}</b>\n\n🧮 Өөр хэмжээ: <code>${amount} ${currency}</code>`);
+    }
+    return;
+  }
+
   if (data.startsWith('soc_')) {
     bot.answerCallbackQuery(q.id);
     const content = await allContent();
@@ -378,6 +416,52 @@ const { autoPost } = require('./autopost');
 setInterval(() => autoPost(bot), 600000); // check every 10min
 autoPost(bot); // run on startup
 
+// ─── DAILY PUSH to all users (THE growth engine) ────────────────
+async function dailyPush() {
+  if (!supabase) return;
+  const banks = await getBanks();
+  const official = buildOfficial(banks);
+  if (!official?.usd) return;
+
+  // Find cheapest bank
+  const sorted = banks.filter(b=>b.name!=='MongolBank'&&b.name!=='MongolBank'&&b.rates.usd?.sell).sort((a,b)=>a.rates.usd.sell-b.rates.usd.sell);
+  const cheapest = sorted[0];
+  const mostExpensive = sorted[sorted.length-1];
+  const savings = mostExpensive ? (mostExpensive.rates.usd.sell - cheapest.rates.usd.sell) : 0;
+
+  const msg = `🦁 <b>KhaanRate — Өдрийн ханш</b>\n\n` +
+    `🇺🇸 USD: <b>₮${fmt(official.usd)}</b>\n` +
+    (official.cny ? `🇨🇳 CNY: <b>₮${fmt(official.cny)}</b>\n` : '') +
+    (official.eur ? `🇪🇺 EUR: <b>₮${fmt(official.eur)}</b>\n` : '') +
+    (savings > 0 ? `\n🏆 ${cheapest.mn} хамгийн хямд: Авах ₮${fmt(cheapest.rates.usd.sell)}\n💸 1000$ авбал ₮${fmt(savings*1000)} хэмнэнэ!` : '') +
+    `\n\n💼 Цалингаа бодох → 💼 Цалин бодох\n📊 Дэлгэрэнгүй → 💵 Ханш харах`;
+
+  // Get ALL users from Supabase
+  const { data: users } = await supabase.from('users').select('chat_id');
+  if (!users?.length) return;
+
+  let sent = 0, errors = 0;
+  for (const u of users) {
+    try {
+      await bot.sendMessage(u.chat_id, msg, { parse_mode: 'HTML' });
+      sent++;
+      if (sent % 20 === 0) await new Promise(r => setTimeout(r, 1000)); // rate limit
+    } catch { errors++; }
+  }
+  console.log(`📢 Daily push: ${sent} sent, ${errors} errors, ${users.length} total users`);
+}
+
+// Push daily at 9am UTC+8 = 1am UTC
+let lastPushDate = null;
+setInterval(() => {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  if (now.getUTCHours() === 1 && today !== lastPushDate) {
+    lastPushDate = today;
+    dailyPush();
+  }
+}, 60000);
+
 // ─── /donate — Support with Telegram Stars ──────────────────────
 bot.onText(/\/donate|❤️ Дэмжлэг/, async msg => {
   send(msg.chat.id,
@@ -444,6 +528,66 @@ bot.onText(/\/api_key/, async msg => {
   
   send(msg.chat.id, `🔑 <b>API түлхүүр үүслээ!</b>\n\n<code>${key}</code>\n\n📋 Төлөвлөгөө: Free (100 хүсэлт/өдөр)\n\n📌 Ашиглах:\n<code>GET https://khaanrate.api/rates?key=${key}</code>\n\n⭐ Pro болгох → /api_pricing`);
 });
+
+// ─── 🧮 Хөрвүүлэх (converter) — MOST USED ────────────────────
+bot.onText(/🧮 Хөрвүүлэх|\/calc|\/convert/, async msg => {
+  send(msg.chat.id,
+    `🧮 <b>Валют хөрвүүлэх</b>\n\nДараах бичвэрүүдийн аль нэгийг бичнэ үү:\n\n<code>1000 usd</code> → хэдэн төгрөг\n<code>500000 mnt</code> → хэдэн доллар\n<code>200 cny</code> → хэдэн төгрөг\n<code>3000 eur</code> → хэдэн төгрөг`,
+    {reply_markup:{inline_keyboard:[[
+      {text:'🇺🇸 1000 USD → MNT',callback_data:'calc_1000_usd'},
+      {text:'🇨🇳 1000 CNY → MNT',callback_data:'calc_1000_cny'}
+    ],[
+      {text:'🇺🇸 500000 MNT → USD',callback_data:'calc_500000_mnt'},
+      {text:'🇪🇺 1000 EUR → MNT',callback_data:'calc_1000_eur'}
+    ]]}}
+  );
+});
+
+// Quick calc text handler: "1000 usd" or "500000 mnt"
+bot.onText(/^(\d+)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)$/i, async (msg, match) => {
+  const amount = parseFloat(match[1]);
+  const currency = match[2].toLowerCase();
+  const banks = await getBanks();
+  const official = buildOfficial(banks);
+  if (!official) { send(msg.chat.id, '⚠️ Ханш татаж чадахгүй байна.'); return; }
+
+  if (currency === 'mnt') {
+    // MNT to all currencies
+    let result = `💰 <b>₮${fmt(amount)} = </b>\n\n`;
+    for (const c of CURRENCIES) {
+      if (!official[c]) continue;
+      result += `${FLAGS[c]} ${fmt(amount / official[c])} ${c.toUpperCase()}\n`;
+    }
+    send(msg.chat.id, result);
+  } else {
+    // Currency to MNT
+    const rate = official[currency];
+    if (!rate) { send(msg.chat.id, '❌ Тухайн валют олдсонгүй.'); return; }
+    const mnt = amount * rate;
+    // Also show with cheapest bank
+    const sorted = banks.filter(b=>b.name!=='MongolBank'&&b.name!=='StateBank'&&b.rates[currency]?.sell).sort((a,b)=>a.rates[currency].sell-b.rates[currency].sell);
+    const cheapest = sorted[0];
+    
+    let result = `💰 <b>${FLAGS[currency]} ${fmt(amount)} ${currency.toUpperCase()} = ₮${fmt(mnt)}</b>\n\n`;
+    result += `🏛️ Албан ханш: ₮${fmt(rate)}\n`;
+    if (cheapest) {
+      const bankMnt = amount * cheapest.rates[currency].sell;
+      result += `🏆 ${cheapest.mn}: ₮${fmt(cheapest.rates[currency].sell)} → <b>₮${fmt(bankMnt)}</b>\n`;
+      const savings = mnt - bankMnt;
+      if (savings > 0) result += `\n💸 Албан ханшаас ${fmt(savings)}₮ хямд авна!`;
+    }
+    result += `\n\n🧮 Өөр хэмжээ: <code>500 ${currency}</code>`;
+    send(msg.chat.id, result);
+  }
+});
+
+// Calc callback buttons
+bot.on('callback_query', async q => {
+  // ... existing handler will be extended
+});
+
+// We need to add calc_ callbacks to existing callback handler
+// Let me add them before the existing callback handler
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 
