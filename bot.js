@@ -298,9 +298,11 @@ async function checkAlerts() {
 }
 setInterval(checkAlerts, 300000);
 
-// Channel auto-post
-postToChannel(bot);
-setInterval(() => postToChannel(bot), 3600000);
+const { autoPost } = require('./autopost');
+
+// Channel auto-post (replaces old postToChannel)
+setInterval(() => autoPost(bot), 600000); // check every 10min
+autoPost(bot); // run on startup
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 
