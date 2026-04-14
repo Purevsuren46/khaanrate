@@ -79,7 +79,7 @@ function formatConversion(r) {
     let msg = `💸 <b>₮${fmt(r.amount)}</b>\n\n`;
     for (const c of CURRENCIES) {
       if (!r[c]) continue;
-      msg += `${FLAGS[c]} <b>${fmt(r[c])} ${c.toUpperCase()}</b>\n`;
+      msg += `${FLAGS[c]} <b>${fmtD(r[c], r[c] < 10 ? 2 : r[c] < 1000 ? 1 : 0)} ${c.toUpperCase()}</b>\n`;
     }
     if (r.banks?.length) {
       const best = r.banks[0];

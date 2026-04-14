@@ -99,6 +99,26 @@ bot.onText(/^(\d[\d,.]*)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)(?:\s+(usd|cny|eur|r
   send(msg.chat.id, U.formatConversion(result));
 });
 
+// ─── 🔄 Хөрвүүлэх — CORE FEATURE ──────────────────────────────────
+bot.onText(/🔄 Хөрвүүлэх|\/calc|\/convert/, async msg => {
+  const official = await U.getOfficial();
+  let text = `🔄 <b>ХӨРВҮҮЛЭГЧ</b>\n\n`;
+  text += `Шууд бичээд илгээнэ үү:\n\n`;
+  text += `<code>1000 usd</code> → долларыг төгрөгт\n`;
+  text += `<code>500 cny</code> → юанийг төгрөгт\n`;
+  text += `<code>5000000 mnt</code> → төгрөгийг валютаар\n`;
+  text += `<code>1000 usd cny</code> → доллар юань руу\n\n`;
+  if (official?.usd) {
+    text += `📊 Одоо: 🇺🇸₮${U.fmt(official.usd)}`;
+    if (official.cny) text += ` | 🇨🇳₮${U.fmt(official.cny)}`;
+    text += `\n\n💰 Зөв банк сонговол $1000-д ₮2,000+ хэмнэнэ!`;
+  }
+  send(msg.chat.id, text, {reply_markup:{inline_keyboard:[
+    [{text:'💵 1000 USD',callback_data:'calc_1000_usd'},{text:'💵 5000 USD',callback_data:'calc_5000_usd'}],
+    [{text:'🏮 10000 CNY',callback_data:'calc_10000_cny'},{text:'💸 1M MNT',callback_data:'calc_1000000_mnt'}]
+  ]}});
+});
+
 // ─── 💵 Банк харьцуулах — KILLER FEATURE ──────────────────────────
 bot.onText(/💵 Ханш|\/rate|\/compare/, async msg => {
   const banks = await fetchAll();
