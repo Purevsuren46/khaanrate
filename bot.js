@@ -291,6 +291,17 @@ bot.on('callback_query', async q => {
     return;
   }
 
+  if (data.startsWith('donate_')) {
+    bot.answerCallbackQuery(q.id);
+    const stars = parseInt(data.replace('donate_',''));
+    try {
+      const link = await createInvoice(chatId, stars);
+      if (link) send(chatId, `⭐ <b>${stars} Stars дэмжлэг</b>\n\nТөлөх: ${link}`);
+      else send(chatId, '❌ Төлбөрийн холбоос үүсгэхэд алдаа гарлаа.');
+    } catch(e) { send(chatId, '❌ Алдаа гарлаа. Дараа дахин оролдоно уу.'); }
+    return;
+  }
+
   if (data.startsWith('cmp_')) {
     bot.answerCallbackQuery(q.id);
     send(chatId, await compareMsg(q.data.replace('cmp_','')));
