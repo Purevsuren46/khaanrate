@@ -4,7 +4,7 @@ const axios = require('axios');
 // ─── Config ─────────────────────────────────────────────────────
 const BUSINESS_PRICE = 50000;
 const BUSINESS_CONTACT = '@khaanrate_support';
-const CHANNEL_ID = '@khaanrate';
+const CHANNEL_ID = '-1003918347360';
 
 const ADS = [
   { text: '💳 Голомт Банк — Гадаадад мөнгө илгээх 0% шимтгэлээр! → golomtbank.com', active: true, impressions: 0 },
