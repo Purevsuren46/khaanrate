@@ -72,6 +72,7 @@ const MAIN_MENU = {
   reply_markup:{keyboard:[
     [{text:'💵 Ханш харах'},{text:'🏦 Банк харьцуулах'}],
     [{text:'🧮 Хөрвүүлэх'},{text:'🚗 Машины импорт'}],
+    [{text:'🏠 Зээл'},{text:'💳 Кредит'}],
     [{text:'🔔 Ханшны мэдэгдэл'},{text:'💸 Мөнгө илгээх'}],
     [{text:'❤️ Дэмжлэг'}]
   ],resize_keyboard:true}
@@ -79,6 +80,7 @@ const MAIN_MENU = {
 
 // ─── /start ──────────────────────────────────────────────────────
 const { calculateCarImport, formatCarResult, carStartMessage, carCountryKeyboard, carPriceKeyboard, carPresetsKeyboard, carSessions } = require('./car-import');
+const { calculateMortgage, formatMortgage, calculatePersonalLoan, formatPersonalLoan, mortgageQuickEstimate } = require('./loan-calc');
 
 bot.on('message', msg => console.log('📩', msg.text?.substring(0,30), 'from', msg.chat.id));
 
@@ -386,6 +388,46 @@ bot.on('callback_query', async q => {
   if (data.startsWith('carins_')) {
     bot.answerCallbackQuery(q.id);
     send(chatId, `🛡️ <b>Автомашины даатгал</b>\n\nМашин авмагц даатгал ЗААВАЛ хэрэгтэй!\n\n📌 <b>Төрлүүд:</b>\n• Нэмэлт даатгал (бүрэн)\n• Гуравдагч этгээд\n• Зорчигчийн даатгал\n\n💰 Дундаж үнэ: ₮300,000-₮1,500,000/жил\n\n💡 Даатгалын компаниудаас харьцуулж авна уу`);
+    return;
+  }
+
+  // ─── Mortgage quick callbacks ───
+  if (data.startsWith('mort_')) {
+    bot.answerCallbackQuery(q.id);
+    const parts = data.replace('mort_','').split('_');
+    const price = parseFloat(parts[0]);
+    const down = parseFloat(parts[1]);
+    const years = parseFloat(parts[2]);
+    try {
+      const result = await calculateMortgage({ propertyPrice: price, downPaymentPct: down, years, salary: null });
+      send(chatId, formatMortgage(result), {
+        reply_markup:{inline_keyboard:[
+          [{text:'🏦 Зээл авах — Голомт Банк', url:'https://www.golomtbank.com/mn/individual/loans/housing-loan'},
+           {text:'🏦 Зээл авах — Хас Банк', url:'https://www.xacbank.mn/mn/loans/housing'}],
+          [{text:'📤 Хуваалцах', callback_data:'share'}]
+        ]}
+      });
+    } catch(e) { send(chatId, '❌ Алдаа'); }
+    return;
+  }
+  
+  // ─── Personal loan quick callbacks ───
+  if (data.startsWith('cred_')) {
+    bot.answerCallbackQuery(q.id);
+    const parts = data.replace('cred_','').split('_');
+    const amount = parseFloat(parts[0]);
+    const months = parseFloat(parts[1]);
+    const salary = parseFloat(parts[2]);
+    try {
+      const result = await calculatePersonalLoan({ amount, months, salary });
+      send(chatId, formatPersonalLoan(result), {
+        reply_markup:{inline_keyboard:[
+          [{text:'📱 LendMN — Онлайн зээл', url:'https://lendmn.mn'},
+           {text:'📱 And Global — Онлайн зээл', url:'https://and.mn'}],
+          [{text:'📤 Хуваалцах', callback_data:'share'}]
+        ]}
+      });
+    } catch(e) { send(chatId, '❌ Алдаа'); }
     return;
   }
 
@@ -805,6 +847,76 @@ bot.onText(/\/car\s+(\d[\d,.]*)\s*(usd|mnt|cny|eur|jpy|krw|gbp)(?:\s+(\d{4}))?(?
 
 // Car loan info callback
 // Car insurance info callback
+
+// ─── 🏠 Зээл — MORTGAGE CALCULATOR ────────────────────────────
+bot.onText(/🏠 Зээл|\/mortgage|\/зээл/, msg => {
+  send(msg.chat.id,
+    `🏠 <b>ЗЭЭЛИЙН ТООЦОООЛУУР</b>\n\n` +
+    `Дараах бичвэрээр тооцоол:
+
+` +
+    `<code>/mortgage 80000000 30 20</code>\n` +
+    `₮80M орон сууц, 30% урьдчилгаа, 20 жил\n\n` +
+    `<code>/mortgage 120000000 30 25 3000000</code>\n` +
+    `₮120M, 30% урьдчилгаа, 25 жил, ₮3M цалин`,
+    {reply_markup:{inline_keyboard:[
+      [{text:'🏠 ₮50M орон сууц',callback_data:'mort_50000000_30_20'},
+       {text:'🏠 ₮80M орон сууц',callback_data:'mort_80000000_30_20'}],
+      [{text:'🏢 ₮120M орон сууц',callback_data:'mort_120000000_30_25'},
+       {text:'🏢 ₮200M орон сууц',callback_data:'mort_200000000_30_25'}],
+      [{text:'🏗️ ₮500M байр',callback_data:'mort_500000000_30_30'}]
+    ]}}
+  );
+});
+
+bot.onText(/\/mortgage\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+(\d+))?/, async (msg, match) => {
+  const propertyPrice = parseFloat(match[1]);
+  const downPct = parseFloat(match[2]);
+  const years = parseFloat(match[3]);
+  const salary = match[4] ? parseFloat(match[4]) : null;
+  try {
+    const result = await calculateMortgage({ propertyPrice, downPaymentPct: downPct, years, salary });
+    send(msg.chat.id, formatMortgage(result), {
+      reply_markup:{inline_keyboard:[
+        [{text:'🏦 Зээл авах — Голомт Банк', url:'https://www.golomtbank.com/mn/individual/loans/housing-loan'},
+         {text:'🏦 Зээл авах — Хас Банк', url:'https://www.xacbank.mn/mn/loans/housing'}],
+        [{text:'📤 Хуваалцах', callback_data:'share'}]
+      ]}
+    });
+  } catch(e) { send(msg.chat.id, '❌ Тооцоолж чадахгүй байна'); }
+});
+
+// ─── 💳 Кредит — PERSONAL LOAN CALCULATOR ───────────────────────
+bot.onText(/💳 Кредит|\/credit|\/loan|\/кредит/, msg => {
+  send(msg.chat.id,
+    `💳 <b>ХУВИЙН ЗЭЭЛИЙН ТООЦОООЛУУР</b>\n\n` +
+    `Дараах бичвэрээр тооцоол:\n\n` +
+    `<code>/credit 5000000 12 2000000</code>\n` +
+    `₮5M зээл, 12 сар, ₮2M цалин`,
+    {reply_markup:{inline_keyboard:[
+      [{text:'💰 ₮1M зээл',callback_data:'cred_1000000_12_1500000'},
+       {text:'💰 ₮3M зээл',callback_data:'cred_3000000_12_2000000'}],
+      [{text:'💰 ₮5M зээл',callback_data:'cred_5000000_12_3000000'},
+       {text:'💰 ₮10M зээл',callback_data:'cred_10000000_24_5000000'}]
+    ]}}
+  );
+});
+
+bot.onText(/\/credit\s+(\d+)\s+(\d+)\s+(\d+)/, async (msg, match) => {
+  const amount = parseFloat(match[1]);
+  const months = parseFloat(match[2]);
+  const salary = parseFloat(match[3]);
+  try {
+    const result = await calculatePersonalLoan({ amount, months, salary });
+    send(msg.chat.id, formatPersonalLoan(result), {
+      reply_markup:{inline_keyboard:[
+        [{text:'📱 LendMN — Онлайн зээл', url:'https://lendmn.mn'},
+         {text:'📱 And Global — Онлайн зээл', url:'https://and.mn'}],
+        [{text:'📤 Хуваалцах', callback_data:'share'}]
+      ]}
+    });
+  } catch(e) { send(msg.chat.id, '❌ Тооцоолж чадахгүй байна'); }
+});
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 
