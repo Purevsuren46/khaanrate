@@ -339,6 +339,8 @@ async function checkAlerts() {
 setInterval(checkAlerts, 300000);
 
 const { DONATION_AMOUNTS, donateKeyboard, createInvoice, WISE_LINK, REMITLY_LINK } = require('./payments');
+const { allContent } = require('./social-content');
+const { autoPost } = require('./autopost');
 
 // Channel auto-post (replaces old postToChannel)
 setInterval(() => autoPost(bot), 600000); // check every 10min
@@ -370,12 +372,9 @@ bot.onText(/\/money/, msg => {
     {reply_markup:{inline_keyboard:[
       [{text:'🌍 Wise-р илгээх', url: WISE_LINK}],
       [{text:'🚀 Remitly-р илгээх', url: REMITLY_LINK}]
-    ]]}
+    ]}}
   );
 });
-
-// Add ❤️ Дэмжлэг to main menu
-// Update MAIN_MENU
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 
