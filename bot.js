@@ -71,12 +71,15 @@ function findCheapest(banks, currency, type) {
 const MAIN_MENU = {
   reply_markup:{keyboard:[
     [{text:'💵 Ханш харах'},{text:'🏦 Банк харьцуулах'}],
+    [{text:'🧮 Хөрвүүлэх'},{text:'🚗 Машины импорт'}],
     [{text:'🔔 Ханшны мэдэгдэл'},{text:'💸 Мөнгө илгээх'}],
-    [{text:'🧮 Хөрвүүлэх'},{text:'❤️ Дэмжлэг'}]
+    [{text:'❤️ Дэмжлэг'}]
   ],resize_keyboard:true}
 };
 
 // ─── /start ──────────────────────────────────────────────────────
+const { calculateCarImport, formatCarResult, carStartMessage, carCountryKeyboard, carPriceKeyboard, carPresetsKeyboard, carSessions } = require('./car-import');
+
 bot.on('message', msg => console.log('📩', msg.text?.substring(0,30), 'from', msg.chat.id));
 
 bot.onText(/\/start/, async msg => {
@@ -337,6 +340,52 @@ bot.on('callback_query', async q => {
       }
       send(chatId, result);
     }
+    return;
+  }
+
+  // ─── Car import callbacks ───
+  if (data.startsWith('carpre_')) {
+    bot.answerCallbackQuery(q.id);
+    // carpre_japan_2000000_jpy_2019_1800_left_hybrid
+    const parts = data.replace('carpre_','').split('_');
+    const country = parts[0];
+    const price = parseFloat(parts[1]);
+    const currency = parts[2];
+    const year = parseInt(parts[3]) || 2020;
+    const cc = parseInt(parts[4]) || 2000;
+    const isLeftHand = parts.includes('left');
+    const isHybrid = parts.includes('hybrid');
+    const isElectric = parts.includes('electric');
+    try {
+      const result = await calculateCarImport({ price, currency, country, year, cc, isLeftHand, isHybrid, isElectric });
+      send(chatId, formatCarResult(result), {
+        reply_markup: { inline_keyboard: [
+          [{text:'🏦 Зээл авах', callback_data:'carloan_' + Math.round(result.totalCost/1000000)},
+           {text:'🛡️ Даатгал', callback_data:'carins_' + Math.round(result.totalCost/1000000)}],
+          [{text:'📤 Хуваалцах', callback_data:'share'}]
+        ]}
+      });
+    } catch(e) { send(chatId, '❌ Алдаа гарлаа'); }
+    return;
+  }
+  
+  if (data.startsWith('car_') && !data.startsWith('carloan') && !data.startsWith('carins')) {
+    bot.answerCallbackQuery(q.id);
+    const country = data.replace('car_','');
+    send(chatId, carPriceKeyboard(country));
+    return;
+  }
+  
+  if (data.startsWith('carloan_')) {
+    bot.answerCallbackQuery(q.id);
+    const millions = data.replace('carloan_','');
+    send(chatId, `🏦 <b>Автомашины зээл</b>\n\nНийт өртөг: ~₮${millions} сая\n\n📌 <b>Шаардлага:</b>\n• 20-30% урьдчилгаа\n• 3-7 жилийн хугацаа\n• Сарын орлогын баталгаа\n\n💡 Зээл авахын тулд банк руу хандана уу\n\n🏆 Хамгийн хямд ханшаар доллар авах → 💵 Ханш харах`);
+    return;
+  }
+  
+  if (data.startsWith('carins_')) {
+    bot.answerCallbackQuery(q.id);
+    send(chatId, `🛡️ <b>Автомашины даатгал</b>\n\nМашин авмагц даатгал ЗААВАЛ хэрэгтэй!\n\n📌 <b>Төрлүүд:</b>\n• Нэмэлт даатгал (бүрэн)\n• Гуравдагч этгээд\n• Зорчигчийн даатгал\n\n💰 Дундаж үнэ: ₮300,000-₮1,500,000/жил\n\n💡 Даатгалын компаниудаас харьцуулж авна уу`);
     return;
   }
 
@@ -720,6 +769,42 @@ bot.onText(/^(\d[\d,.]*)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)(?:\s+(usd|cny|eur|r
   
   send(msg.chat.id, result);
 });
+
+// ─── 🚗 Машины импорт — CAR IMPORT CALCULATOR ───────────────
+bot.onText(/🚗 Машины импорт|\/car|\/import/, msg => {
+  send(msg.chat.id, carStartMessage(), carPresetsKeyboard());
+});
+
+// Quick car command: /car 2000000 jpy 2020 2000 left hybrid
+bot.onText(/\/car\s+(\d[\d,.]*)\s*(usd|mnt|cny|eur|jpy|krw|gbp)(?:\s+(\d{4}))?(?:\s+(\d+))?(?:\s+(left|зүүн))?(?:\s+(hybrid|хайбрид|electric|цахилгаан))?/i, async (msg, match) => {
+  const price = parseFloat(match[1].replace(/,/g, ''));
+  const currency = match[2].toLowerCase();
+  const year = match[3] ? parseInt(match[3]) : 2020;
+  const cc = match[4] ? parseInt(match[4]) : 2000;
+  const isLeftHand = !!(match[5] || '').match(/left|зүүн/i);
+  const isHybrid = !!(match[6] || '').match(/hybrid|хайбрид/i);
+  const isElectric = !!(match[6] || '').match(/electric|цахилгаан/i);
+  
+  // Determine country from currency
+  const countryMap = { jpy: 'japan', krw: 'korea', cny: 'china', usd: 'usa', eur: 'europe', gbp: 'europe' };
+  const country = countryMap[currency] || 'japan';
+  
+  try {
+    const result = await calculateCarImport({ price, currency, country, year, cc, isLeftHand, isHybrid, isElectric });
+    send(msg.chat.id, formatCarResult(result), {
+      reply_markup: { inline_keyboard: [
+        [{text:'🏦 Зээл авах', callback_data:'carloan_' + Math.round(result.totalCost/1000000)},
+         {text:'🛡️ Даатгал', callback_data:'carins_' + Math.round(result.totalCost/1000000)}],
+        [{text:'📤 Хуваалцах', callback_data:'share'}]
+      ]}
+    });
+  } catch(e) {
+    send(msg.chat.id, '❌ Тооцоолож чадахгүй байна. Дахин оролдоно уу.');
+  }
+});
+
+// Car loan info callback
+// Car insurance info callback
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 
