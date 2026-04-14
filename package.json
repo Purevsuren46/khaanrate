@@ -1,0 +1,22 @@
+{
+  "name": "khaanrate",
+  "version": "1.0.0",
+  "description": "🦁 MNT exchange rate alert bot for Mongolia — Telegram bot with premium subscriptions",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "keywords": ["mongolia", "mnt", "exchange-rate", "telegram-bot", "khaanrate", "tugrik"],
+  "author": "Purevsuren Munkhzaya",
+  "license": "MIT"
+}
