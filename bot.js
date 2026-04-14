@@ -58,7 +58,8 @@ function findCheapest(banks, currency, type) {
 const MAIN_MENU = {
   reply_markup:{keyboard:[
     [{text:'💵 Ханш харах'},{text:'🏦 Банк харьцуулах'}],
-    [{text:'🔔 Ханшны мэдэгдэл'},{text:'💡 Зөвлөгөө'}]
+    [{text:'🔔 Ханшны мэдэгдэл'},{text:'💸 Мөнгө илгээх'}],
+    [{text:'💡 Зөвлөгөө'},{text:'❤️ Дэмжлэг'}]
   ],resize_keyboard:true}
 };
 
@@ -192,7 +193,8 @@ bot.onText(/💡 Зөвлөгөө|\/help/, msg => {
     `🔔 <b>Мэдэгдэл</b> — /alert USD 3600\n` +
     `📊 <b>/best USD</b> — шилдэг банк нэг харцад\n` +
     `📋 <b>/report</b> — бизнес тайлан\n` +
-    `📤 <b>/share</b> — найздаа илгээх\n\n` +
+    `📤 <b>/share</b> — найздаа илгээх\n` +
+    `❤️ <b>/donate</b> — ботыг дэмжих\n\n` +
     `🇺🇸 USD 🇨🇳 CNY 🇪🇺 EUR 🇷🇺 RUB\n🇯🇵 JPY 🇰🇷 KRW 🇬🇧 GBP`
   );
 });
@@ -336,12 +338,44 @@ async function checkAlerts() {
 }
 setInterval(checkAlerts, 300000);
 
-const { allContent } = require('./social-content');
-const { autoPost } = require('./autopost');
+const { DONATION_AMOUNTS, donateKeyboard, createInvoice, WISE_LINK, REMITLY_LINK } = require('./payments');
 
 // Channel auto-post (replaces old postToChannel)
 setInterval(() => autoPost(bot), 600000); // check every 10min
 autoPost(bot); // run on startup
+
+// ─── /donate — Support with Telegram Stars ──────────────────────
+bot.onText(/\/donate|❤️ Дэмжлэг/, async msg => {
+  send(msg.chat.id,
+    `❤️ <b>KhaanRate-г дэмжих</b>\n\n` +
+    `Бот үнэгүй байхын тулд танай дэмжлэг хэрэгтэй!\n\n` +
+    `⭐ Telegram Stars-аар дэмжнэ үү:`,
+    {reply_markup:{inline_keyboard:[
+      [{text:'☕ Кофе — 50⭐',callback_data:'donate_50'}],
+      [{text:'🍕 Пицца — 150⭐',callback_data:'donate_150'}],
+      [{text:'❤️ Дэмжлэг — 500⭐',callback_data:'donate_500'}],
+      [{text:'🦁 Хүчирхэг — 1000⭐',callback_data:'donate_1000'}]
+    ]}}
+  );
+});
+
+// ─── /money — Fast money transfer (affiliate) ────────────────────
+bot.onText(/\/money/, msg => {
+  send(msg.chat.id,
+    `💸 <b>Гадаадад мөнгө илгээх</b>\n\n` +
+    `🌍 <b>Wise</b> — 0.5% шимтгэл, 1 цагт хүрдэг\n` +
+    `Хамгийн хямд, илүү найдвартай\n\n` +
+    `🚀 <b>Remitly</b> — анхны шилжүүлэгт 0%\n` +
+    `Монгол руу хурдан илгээнэ`,
+    {reply_markup:{inline_keyboard:[
+      [{text:'🌍 Wise-р илгээх', url: WISE_LINK}],
+      [{text:'🚀 Remitly-р илгээх', url: REMITLY_LINK}]
+    ]]}
+  );
+});
+
+// Add ❤️ Дэмжлэг to main menu
+// Update MAIN_MENU
 
 bot.on('polling_error', e => console.error('Poll:', e.message?.substring(0,60)));
 
