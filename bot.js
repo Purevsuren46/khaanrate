@@ -8,6 +8,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const BANKS_API = 'https://mongolian-bank-exchange-rate-6620c122ff22.herokuapp.com';
+const FX_API = 'https://open.er-api.com/v6/latest/USD';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
@@ -35,6 +36,34 @@ const CURRENCY_FLAGS = { usd: '🇺🇸', cny: '🇨🇳', eur: '🇪🇺', rub:
 // ─── Rate fetching ──────────────────────────────────────────────────
 let cachedBankRates = null;
 let cachedBankAt = 0;
+let cachedFxRates = null;
+let cachedFxAt = 0;
+
+// Official rates from open.er-api.com (free, no key, daily updates)
+async function getOfficialRates() {
+  const now = Date.now();
+  if (cachedFxRates && now - cachedFxAt < 300000) return cachedFxRates;
+
+  try {
+    const { data } = await axios.get(FX_API, { timeout: 10000 });
+    if (!data || !data.rates) throw new Error('No rates in response');
+    const mnt = data.rates.MNT;
+    cachedFxRates = {
+      usd: { cash: { buy: Math.round(mnt), sell: Math.round(mnt) } },
+      cny: { cash: { buy: Math.round(mnt / data.rates.CNY * 100) / 100, sell: Math.round(mnt / data.rates.CNY * 100) / 100 } },
+      eur: { cash: { buy: Math.round(mnt / data.rates.EUR), sell: Math.round(mnt / data.rates.EUR) } },
+      rub: { cash: { buy: Math.round(mnt / data.rates.RUB * 100) / 100, sell: Math.round(mnt / data.rates.RUB * 100) / 100 } },
+      jpy: { cash: { buy: Math.round(mnt / data.rates.JPY * 100) / 100, sell: Math.round(mnt / data.rates.JPY * 100) / 100 } },
+      krw: { cash: { buy: Math.round(mnt / data.rates.KRW * 100) / 100, sell: Math.round(mnt / data.rates.KRW * 100) / 100 } },
+      gbp: { cash: { buy: Math.round(mnt / data.rates.GBP), sell: Math.round(mnt / data.rates.GBP) } },
+    };
+    cachedFxAt = now;
+    return cachedFxRates;
+  } catch (err) {
+    console.error('FX API error:', err.message);
+    return cachedFxRates;
+  }
+}
 
 async function getBankRates() {
   const now = Date.now();
@@ -67,16 +96,17 @@ function getBestRates(bankRates, currency) {
 }
 
 // ─── Format helpers ─────────────────────────────────────────────────
-function formatOfficialRates(bankRates) {
-  const mongolBank = bankRates.find(b => b.bank_name === 'MongolBank');
-  if (!mongolBank || !mongolBank.rates) return '📊 Ханшны мэдээлэл одоогоор байхгүй байна.';
+async function formatOfficialRates() {
+  const rates = await getOfficialRates();
+  if (!rates) return '📊 Ханшны мэдээлэл одоогоор байхгүй байна.';
 
-  let msg = '<b>📊 Монголбанкны албан ёсны ханш</b>\n\n';
+  const bankRates = await getBankRates();
+  let msg = '<b>📊 Төгрөгийн ханш (live)</b>\n\n';
   for (const code of PRIORITY_CURRENCIES) {
-    const r = mongolBank.rates[code];
+    const r = rates[code];
     if (r) {
       const flag = CURRENCY_FLAGS[code] || '💱';
-      const rate = r.cash ? r.cash.buy : r.noncash.buy;
+      const rate = r.cash.buy;
       msg += `${flag} ${code.toUpperCase()}: ₮${rate.toLocaleString()}`;
 
       const bestRates = getBestRates(bankRates, code);
@@ -183,7 +213,7 @@ bot.onText(/\/start/, (msg) => {
 // 📊 Ханш
 bot.onText(/📊 Ханш|\/rate/, async (msg) => {
   const bankRates = await getBankRates();
-  send(msg.chat.id, formatOfficialRates(bankRates));
+  send(msg.chat.id, await formatOfficialRates());
 });
 
 // 🏦 Банк харьцуулалт
@@ -375,19 +405,18 @@ bot.onText(/\/history (.+)/, async (msg, match) => {
 // ─── Alert checker (every 5 min) ─────────────────────────────────────
 async function checkAlerts() {
   if (!supabase) return;
-  const bankRates = await getBankRates();
-  const mongolBank = bankRates.find(b => b.bank_name === 'MongolBank');
-  if (!mongolBank) return;
+  const officialRates = await getOfficialRates();
+  if (!officialRates) return;
 
   const { data: alerts } = await supabase.from('alerts').select('*').eq('active', true);
   if (!alerts) return;
 
   for (const alert of alerts) {
     const cur = alert.currency.toLowerCase();
-    const r = mongolBank.rates[cur];
+    const r = officialRates[cur];
     if (!r) continue;
 
-    const currentRate = r.cash ? r.cash.buy : (r.noncash ? r.noncash.buy : 0);
+    const currentRate = r.cash.buy;
     if (currentRate <= 0) continue;
 
     const triggered =
