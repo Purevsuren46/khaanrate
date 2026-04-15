@@ -196,82 +196,56 @@ bot.onText(/💵 Ханш|\/rate|\/compare/, async msg => {
   const banks = await fetchAll();
   const official = buildOfficial(banks);
   if (!official) { send(msg.chat.id,'⚠️ Ханш татаж чадахгүй байна.'); return; }
+  const now = new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Ulaanbaatar'});
 
-  // USD — the most important comparison
+  let text = `<b>💵 БҮХ БАНКНЫ ХАНШ</b> | 🕐 ${now}\n\n`;
+
+  // ─── ALL CURRENCIES TABLE ───
+  const currencies = ['usd','cny','eur','rub','jpy','krw','gbp'];
+  for (const cur of currencies) {
+    if (!official[cur]) continue;
+    const sellers = banks.filter(b=>b.rates[cur]?.sell).sort((a,b2)=>a.rates[cur].sell-b2.rates[cur].sell);
+    const buyers = banks.filter(b=>b.rates[cur]?.buy).sort((a,b2)=>b2.rates[cur].buy-a.rates[cur].buy);
+    if (!sellers.length) continue;
+
+    const cheapest = sellers[0];
+    const bestBuy = buyers[0];
+    const spread = cheapest.rates[cur].sell - (official[cur]||0);
+
+    text += `${U.FLAGS[cur]} <b>${cur.toUpperCase()}</b> Албан: ₮${U.fmt(official[cur])}\n`;
+    text += `   📤 Авах: `;
+    for (let i=0; i<sellers.length; i++) {
+      const b = sellers[i];
+      text += `${i===0?'🏆':''}${b.mn.replace(/🏦 |💚 |🏛️ /,'')} ₮${U.fmt(b.rates[cur].sell)}${i<sellers.length-1?' | ':''}`;
+    }
+    text += `\n`;
+    text += `   📥 Зарах: `;
+    for (let i=0; i<buyers.length; i++) {
+      const b = buyers[i];
+      text += `${i===0?'🏆':''}${b.mn.replace(/🏦 |💚 |🏛️ /,'')} ₮${U.fmt(b.rates[cur].buy)}${i<buyers.length-1?' | ':''}`;
+    }
+    if (sellers.length >= 2) {
+      const save = sellers[sellers.length-1].rates[cur].sell - cheapest.rates[cur].sell;
+      if (save > 0) text += `\n   💰 ${cheapest.mn.replace(/🏦 |💚 |🏛️ /,'')}-р ${cur.toUpperCase()}${cur==='jpy'||cur==='krw'?'100,000':'1,000'} авахдаа ₮${U.fmt(save*(cur==='jpy'||cur==='krw'?100000:1000))} хэмнэнэ`;
+    }
+    text += `\n\n`;
+  }
+
+  // ─── SAVINGS SUMMARY ───
   const usdSellers = banks.filter(b=>b.rates.usd?.sell).sort((a,b2)=>a.rates.usd.sell-b2.rates.usd.sell);
   const usdBuyers = banks.filter(b=>b.rates.usd?.buy).sort((a,b2)=>b2.rates.usd.buy-a.rates.usd.buy);
   const cheapestUsd = usdSellers[0];
-  const expensiveUsd = usdSellers[usdSellers.length-1];
   const bestBuyUsd = usdBuyers[0];
-  const worstBuyUsd = usdBuyers[usdBuyers.length-1];
-  const usdSaving = expensiveUsd?.rates.usd.sell - cheapestUsd?.rates.usd.sell;
-  const spreadUsd = cheapestUsd?.rates.usd.sell - (official.usd||0);
+  const usdSaving = usdSellers[usdSellers.length-1]?.rates.usd.sell - cheapestUsd?.rates.usd.sell;
 
-  let text = `<b>💵 ХАНШ — ХЭМНЭЛТЭЭ ОЛ</b>\n\n`;
-
-  // ─── USD LOSS CALCULATOR ───
-  text += `🇺🇸 <b>АМЕРИК ДОЛЛАР</b>\n`;
-  text += `   Албан ханш: ₮${U.fmt(official.usd)}\n\n`;
-
-  // Show all banks ranked
-  text += `📊 <b>Авах үнэ (хямдаас):</b>\n`;
-  for (let i=0; i<usdSellers.length; i++) {
-    const b = usdSellers[i];
-    const overpay = b.rates.usd.sell - cheapestUsd.rates.usd.sell;
-    const mark = i===0 ? '🏆' : `+₮${U.fmt(overpay)}`;
-    text += `   ${i===0?'🏆':'  '} ${b.mn}: ₮${U.fmt(b.rates.usd.sell)}`;
-    if (i > 0) text += ` (₮${U.fmt(overpay * 1000)}/$1000 илүү)`;
-    text += `\n`;
-  }
-  text += `\n`;
-
-  text += `📊 <b>Зарах үнэ (өндөрөөс):</b>\n`;
-  for (let i=0; i<usdBuyers.length; i++) {
-    const b = usdBuyers[i];
-    const less = bestBuyUsd.rates.usd.buy - b.rates.usd.buy;
-    text += `   ${i===0?'🏆':'  '} ${b.mn}: ₮${U.fmt(b.rates.usd.buy)}`;
-    if (i > 0) text += ` (₮${U.fmt(less * 1000)}/$1000 бага)`;
-    text += `\n`;
-  }
-  text += `\n`;
-
-  // ─── SAVINGS CALCULATOR ───
-  text += `💰 <b>ХЭМНЭЛТИЙН ТООЦОО:</b>\n`;
-  if (usdSaving > 0) {
-    text += `   $500 авахдаа ${cheapestUsd.mn}-р → ₮${U.fmt(usdSaving*500)} хэмнэнэ\n`;
-    text += `   $1,000 авахдаа ${cheapestUsd.mn}-р → ₮${U.fmt(usdSaving*1000)} хэмнэнэ\n`;
-    text += `   $5,000 авахдаа ${cheapestUsd.mn}-р → ₮${U.fmt(usdSaving*5000)} хэмнэнэ\n`;
-  }
-  if (spreadUsd > 0) {
-    text += `\n   ⚠️ Бүх банк албан ханшаас ₮${U.fmt(spreadUsd)}/$1 илүү авна\n`;
-    text += `   ⚠️ $5,000 авхад ₮${U.fmt(spreadUsd*5000)} илүү төлнө\n`;
-  }
-  text += `\n`;
-
-  // ─── CNY QUICK ───
-  const cnySellers = banks.filter(b=>b.rates.cny?.sell).sort((a,b2)=>a.rates.cny.sell-b2.rates.cny.sell);
-  const cnyBuyers = banks.filter(b=>b.rates.cny?.buy).sort((a,b2)=>b2.rates.cny.buy-a.rates.cny.buy);
-  const cheapestCny = cnySellers[0];
-  const expensiveCny = cnySellers[cnySellers.length-1];
-  const cnySaving = expensiveCny?.rates.cny.sell - cheapestCny?.rates.cny.sell;
-
-  if (official.cny) {
-    text += `🇨🇳 <b>ХЯТАД ЮАНЬ</b>\n`;
-    text += `   Албан: ₮${U.fmt(official.cny)} | `;
-    text += `🏆 Авах: ${cheapestCny?.mn} ₮${U.fmt(cheapestCny?.rates.cny.sell)}`;
-    if (cnySaving > 0) text += ` (₮${U.fmt(cnySaving*10000)}/¥10,000 хэмнэнэ)`;
-    text += `\n`;
-    text += `   🏆 Зарах: ${cnyBuyers[0]?.mn} ₮${U.fmt(cnyBuyers[0]?.rates.cny.buy)}\n\n`;
-  }
-
-  // ─── SMART TIP ───
-  text += `💡 <b>ЗӨВЛӨГӨӨ:</b> `;
-  text += `Авахдаа ${cheapestUsd?.mn}, зарахдаа ${bestBuyUsd?.mn}-р оч`;
+  text += `💰 <b>ХЭМНЭЛТ:</b> `;
+  if (usdSaving > 0) text += `$1,000 авахдаа ${cheapestUsd?.mn}-р ₮${U.fmt(usdSaving*1000)} хэмнэнэ!`;
+  text += `\n💡 Авахдаа ${cheapestUsd?.mn}, зарахдаа ${bestBuyUsd?.mn}-р оч`;
+  text += U.disclaimer();
 
   const refBtns = [
     [{text:'🧮 1000 USD→MNT',callback_data:'calc_1000_usd'},{text:'🧮 5000 USD→MNT',callback_data:'calc_5000_usd'}],
     [{text:'🏮 10000 CNY→MNT',callback_data:'calc_10000_cny'},{text:'📊 Зээлийн хүү',callback_data:'rates_mortgage_mnt'}],
-    [{text:'📤 Найздаа илгээх', callback_data:'share'}]
   ];
   send(msg.chat.id, text, {reply_markup:{inline_keyboard:refBtns}});
 });
