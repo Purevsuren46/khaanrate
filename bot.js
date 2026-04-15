@@ -90,13 +90,52 @@ bot.onText(/\/start/, async msg => {
 
 
 
-// Smart converter
+// Smart converter (currency)
 bot.onText(/^(\d[\d,.]*)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)(?:\s+(usd|cny|eur|rub|jpy|krw|gbp))?$/i, async (msg, match) => {
   const amount = parseFloat(match[1].replace(/,/g, ''));
   const from = match[2].toLowerCase();
   const to = match[3]?.toLowerCase();
   const result = await U.convertCurrency(amount, from, to || null);
   send(msg.chat.id, U.formatConversion(result));
+});
+
+// Smart loan converter — "80сая зээл", "5сая кредит 12", "зээл 80000000 30 20"
+bot.onText(/^(?:(\d[\d,.]*)\s*(сая|м|мянга|s)?\s*(зээл|ипотек|кредит|credit|mortgage)|зээл\s+(\d[\d,.]*)\s*(?:сая)?\s*(?:(\d+)\s*)?(?:(\d+)\s*)?(?:(\d[\d,.]*)\s*)?)$/i, async (msg, match) => {
+  // Parse amount
+  let amount = parseFloat((match[1] || match[4] || '0').replace(/,/g, ''));
+  const unit = (match[2] || '').toLowerCase();
+  const type = (match[3] || '').toLowerCase();
+  const arg2 = match[5]; // down% or months
+  const arg3 = match[6]; // years or months  
+  const arg4 = match[7]; // salary
+
+  // Unit multiplier
+  if (unit === 'сая' || unit === 'm' || unit === 's') amount *= 1000000;
+  else if (unit === 'мянга') amount *= 1000;
+
+  if (amount < 100000) return; // too small, probably not a loan
+
+  // Determine type: кредит = personal, зээл/ипотек = mortgage
+  const isCredit = /кредит|credit/i.test(type);
+
+  if (isCredit) {
+    // Personal loan: amount, months, salary
+    const months = parseInt(arg2) || 12;
+    const salary = parseFloat(arg3) || 2000000;
+    try {
+      const result = await U.calculatePersonalLoan({ amount, months, salary });
+      send(msg.chat.id, U.formatPersonalLoan(result));
+    } catch(e) { send(msg.chat.id, '❌ Тооцоолж чадахгүй байна'); }
+  } else {
+    // Mortgage: amount, downPct, years, salary
+    const downPct = parseFloat(arg2) || 30;
+    const years = parseFloat(arg3) || 20;
+    const salary = parseFloat(arg4) || null;
+    try {
+      const result = await U.calculateMortgage({ propertyPrice: amount, downPct, years, salary, currency: 'mnt' });
+      send(msg.chat.id, U.formatMortgage(result));
+    } catch(e) { send(msg.chat.id, '❌ Тооцоолж чадахгүй байна'); }
+  }
 });
 
 // ─── 🔄 Хөрвүүлэх — CORE FEATURE ──────────────────────────────────
