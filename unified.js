@@ -726,7 +726,7 @@ function formatSmartMortgage(r) {
 }
 
 module.exports = {
-  fmt, fmtD, FLAGS, NAMES,
+  fmt, fmtD, FLAGS, NAMES, disclaimer,
   getOfficial,
   convertCurrency, formatConversion,
   calcMonthlyPayment, calcReducingBalance,
