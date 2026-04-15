@@ -1,4 +1,5 @@
 const axios = require('axios');
+const cheerio = require('cheerio');
 const cache = require('./cache');
 
 const CURRENCIES = ['usd','cny','eur','rub','jpy','krw','gbp'];
@@ -64,6 +65,54 @@ async function statebank() {
   } catch { return null; }
 }
 
+// ─── TDBM (Худалдаа Хөгжлийн Банк) ────────────────────────────
+async function tdbm() {
+  try {
+    const {data: html} = await axios.get('https://www.tdbm.mn/mn/exchange-rates', {timeout:10000, headers:{'User-Agent':randUA(),'Accept':'text/html'}});
+    const $ = cheerio.load(html);
+    const rates = {};
+    $('table tbody tr, table tr').each((_, row) => {
+      const cells = [];
+      $(row).find('td').each((_, cell) => cells.push($(cell).text().trim()));
+      for (let i = 0; i < cells.length; i++) {
+        const code = cells[i].trim().toUpperCase();
+        if (CURRENCIES.includes(code.toLowerCase())) {
+          const nums = cells.slice(i+1).map(c => parseFloat(c.replace(/[^0-9.]/g,''))).filter(n => n > 0);
+          // TDBM: official, cash_buy, cash_sell, noncash_buy, noncash_sell
+          if (nums.length >= 3) rates[code.toLowerCase()] = {buy: nums[1], sell: nums[2]};
+          else if (nums.length >= 2) rates[code.toLowerCase()] = {buy: nums[0], sell: nums[1]};
+          break;
+        }
+      }
+    });
+    return Object.keys(rates).length ? {name:'TDBM', mn:'🏦 ХХБ (ТДБ)', rates} : null;
+  } catch { return null; }
+}
+
+// ─── TransBank ───────────────────────────────────────────────────
+async function transbank() {
+  try {
+    const {data: html} = await axios.get('https://www.transbank.mn/exchange', {timeout:10000, headers:{'User-Agent':randUA(),'Accept':'text/html'}});
+    const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    if (!m) return null;
+    const pageData = JSON.parse(m[1]);
+    const rateData = pageData?.props?.pageProps?.rateData;
+    if (!rateData) return null;
+    const date = Object.keys(rateData)[0];
+    const dayRates = rateData[date];
+    const rates = {};
+    for (const [code, info] of Object.entries(dayRates)) {
+      const lc = code.toLowerCase();
+      if (!CURRENCIES.includes(lc)) continue;
+      const cash = info['2'] || info['1'] || {}; // key "2" = cash
+      const buy = parseFloat(cash.BUY_RATE || 0);
+      const sell = parseFloat(cash.SELL_RATE || 0);
+      if (buy > 0 || sell > 0) rates[lc] = {buy, sell};
+    }
+    return Object.keys(rates).length ? {name:'TransBank', mn:'🏦 Транс Банк', rates} : null;
+  } catch { return null; }
+}
+
 // ─── Outlier Detection ───────────────────────────────────────────
 function detectOutliers(banks, prevBanks) {
   if (!prevBanks) return [];
@@ -97,8 +146,8 @@ async function fetchAll(opts = {}) {
   }
 
   console.log('🏦 Fetching bank rates...');
-  const [g, x, s] = await Promise.all([golomt(), xacbank(), statebank()]);
-  const banks = [g, x, s].filter(Boolean);
+  const [g, x, s, t, tb] = await Promise.all([golomt(), xacbank(), statebank(), tdbm(), transbank()]);
+  const banks = [g, x, s, t, tb].filter(Boolean);
   banks.forEach(b => console.log(`  ✅ ${b.name}`));
 
   if (banks.length > 0) {
@@ -137,4 +186,4 @@ function startBackgroundRefresh(intervalMs = 15 * 60 * 1000) {
   fetchAll({ force: true }).catch(e => console.error('Initial fetch error:', e.message));
 }
 
-module.exports = {fetchAll, golomt, xacbank, statebank, buildOfficial, startBackgroundRefresh, detectOutliers, CURRENCIES, CUR_MAP};
+module.exports = {fetchAll, golomt, xacbank, statebank, tdbm, transbank, buildOfficial, startBackgroundRefresh, detectOutliers, CURRENCIES, CUR_MAP};
