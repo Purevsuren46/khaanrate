@@ -124,7 +124,7 @@ bot.onText(/^(\d[\d,.]*)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)(?:\s+(usd|cny|eur|r
   const to = match[3]?.toLowerCase();
   const result = await U.convertCurrency(amount, from, to || null);
   const convText = U.formatConversion(result);
-  const shareUrl = `https://t.me/share/url?url=https://t.me/${BOT_USERNAME}&text=${encodeURIComponent('Би @KhaanRateBot дээр ' + fmt(amount) + ' ' + from.toUpperCase() + ' хөрвүүлж ₮' + fmt(result.mntAmount) + ' хэмнэлт оллоо!')}`;
+  const shareUrl = `https://t.me/share/url?url=https://t.me/${BOT_USERNAME}&text=${encodeURIComponent('Би @KhaanRateBot дээр ' + U.fmt(amount) + ' ' + from.toUpperCase() + ' хөрвүүлж ₮' + U.fmt(result.mntAmount) + ' хэмнэлт оллоо!')}`;
   const affBtns = affiliateBtns(from);
   const btns = [{ text: '📤 Хуваалцах', url: shareUrl }];
   if (affBtns?.inline_keyboard) btns.push(...affBtns.inline_keyboard[0]);
