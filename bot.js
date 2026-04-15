@@ -132,41 +132,41 @@ bot.onText(/^(\d[\d,.]*)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)(?:\s+(usd|cny|eur|r
   send(msg.chat.id, convText, { reply_markup: { inline_keyboard: [btns] } });
 });
 
-// Smart loan converter — "80сая зээл", "5сая кредит 12", "зээл 80000000 30 20"
-bot.onText(/^(?:(\d[\d,.]*)\s*(сая|м|мянга|s)?\s*(зээл|ипотек|кредит|credit|mortgage)|зээл\s+(\d[\d,.]*)\s*(?:сая)?\s*(?:(\d+)\s*)?(?:(\d+)\s*)?(?:(\d[\d,.]*)\s*)?)$/i, async (msg, match) => {
-  // Parse amount
-  let amount = parseFloat((match[1] || match[4] || '0').replace(/,/g, ''));
+// Smart loan converter — Human-like input
+// Patterns: "100сая ипотек 20жил 30%", "5сая кредит 12", "80сая байр", "зээл 80000000 30 20"
+bot.onText(/^(?:(\d[\d,.]*)\s*(сая|м|мянга|s)?\s*(ипотек|байр|зээл|кредит|credit|mortgage)(?:\s*(\d+)\s*(?:жил|ж|j))?\s*(?:(\d+)\s*(?:хувь|%))?|зээл\s+(\d[\d,.]*)\s*(?:(\d+)\s*)?(?:(\d+)\s*)?(?:(\d[\d,.]*)\s*)?)$/i, async (msg, match) => {
+  let amount = parseFloat((match[1] || match[6] || '0').replace(/,/g, ''));
   const unit = (match[2] || '').toLowerCase();
   const type = (match[3] || '').toLowerCase();
-  const arg2 = match[5]; // down% or months
-  const arg3 = match[6]; // years or months  
-  const arg4 = match[7]; // salary
+  const yearsArg = match[4];
+  const downArg = match[5];
+  const arg2 = match[7];
+  const arg3 = match[8];
+  const arg4 = match[9];
 
   // Unit multiplier
   if (unit === 'сая' || unit === 'm' || unit === 's') amount *= 1000000;
   else if (unit === 'мянга') amount *= 1000;
 
-  if (amount < 100000) return; // too small, probably not a loan
+  if (amount < 100000) return;
 
-  // Determine type: кредит = personal, зээл/ипотек = mortgage
   const isCredit = /кредит|credit/i.test(type);
 
   if (isCredit) {
-    // Personal loan: amount, months, salary
-    const months = parseInt(arg2) || 12;
-    const salary = parseFloat(arg3) || 2000000;
+    const months = parseInt(yearsArg || arg2) || 12;
+    const salary = parseFloat(downArg || arg3) || 2000000;
     try {
       const result = await U.calculatePersonalLoan({ amount, months, salary });
       send(msg.chat.id, U.formatPersonalLoan(result));
     } catch(e) { send(msg.chat.id, '❌ Тооцоолж чадахгүй байна'); }
   } else {
-    // Mortgage: amount, downPct, years, salary
-    const downPct = parseFloat(arg2) || 30;
-    const years = parseFloat(arg3) || 20;
+    // Mortgage: smart defaults — 30% down, 20 years
+    const years = parseInt(yearsArg) || parseInt(arg3) || 20;
+    const downPct = parseFloat(downArg) || parseFloat(arg2) || 30;
     const salary = parseFloat(arg4) || null;
     try {
       const result = await U.calculateMortgage({ propertyPrice: amount, downPct, years, salary, currency: 'mnt' });
-      send(msg.chat.id, U.formatMortgage(result));
+      send(msg.chat.id, U.formatSmartMortgage(result));
     } catch(e) { send(msg.chat.id, '❌ Тооцоолж чадахгүй байна'); }
   }
 });
@@ -333,7 +333,7 @@ bot.onText(/\/mortgage\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+(\d+))?/, async (msg, match)
       propertyPrice: parseFloat(match[1]), downPct: parseFloat(match[2]),
       years: parseFloat(match[3]), salary: match[4] ? parseFloat(match[4]) : null, currency: 'mnt'
     });
-    send(msg.chat.id, U.formatMortgage(result));
+    send(msg.chat.id, U.formatSmartMortgage(result));
   } catch(e) { send(msg.chat.id, '❌ Тооцоолож чадахгүй байна'); }
 });
 
@@ -524,7 +524,7 @@ bot.on('callback_query', async q => {
     const parts = data.replace('mort_','').split('_');
     try {
       const result = await U.calculateMortgage({ propertyPrice: parseFloat(parts[0]), downPct: parseFloat(parts[1]), years: parseFloat(parts[2]), salary: null, currency: 'mnt' });
-      send(chatId, U.formatMortgage(result));
+      send(chatId, U.formatSmartMortgage(result));
     } catch(e) { send(chatId, '❌ Алдаа'); }
     return;
   }

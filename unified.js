@@ -673,12 +673,61 @@ async function getOfficial() {
   } catch { return { usd: 3573, cny: 490, eur: 3900 }; }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SMART MORTGAGE FORMAT — Value-driven, savings-focused
+// ═══════════════════════════════════════════════════════════════════
+
+function formatSmartMortgage(r) {
+  const c = r.currency === 'usd' ? '$' : '₮';
+  let msg = `🏠 <b>ОРОН СУУЦНЫ ЗЭЭЛ (ИПОТЕК)</b>\n\n`;
+
+  // 1. Хүсэлтийн хураангуй
+  msg += `📋 <b>Таны хүсэлт:</b>\n`;
+  msg += `Байрны үнэ: ${c}${fmt(r.propertyPrice)}\n`;
+  msg += `Урьдчилгаа: ${c}${fmt(r.downPayment)} (${r.downPct}%)\n`;
+  msg += `Зээлэх дүн: <b>${c}${fmt(r.loanAmount)}</b> (${r.years} жил)\n`;
+  msg += `━━━━━━━━━━━━━━━━━━\n`;
+
+  if (!r.banks || r.banks.length === 0) {
+    return msg + `❌ Уучлаарай, ${r.downPct}% урьдчилгаатайгаар зээл олгох банк олдсонгүй.\n💡 Урьдчилгаагаа 30% болгож үзнэ үү.`;
+  }
+
+  // 2. Шилдэг сонголт + хэмнэлт
+  const best = r.banks[0];
+  const worst = r.banks[r.banks.length - 1];
+  const live = best.source === 'api' ? ' 🔴' : '';
+
+  msg += `🏆 <b>ШИЛДЭГ СОНГОЛТ:</b>\n`;
+  msg += `<b>${best.mn}${live}</b> (Жилийн ${fmtD(best.min, 1)}%)\n`;
+  msg += `Сард төлөх: <b>${c}${fmt(best.monthlyMin)}</b>\n\n`;
+
+  if (best.mn !== worst.mn) {
+    const monthlySave = worst.monthlyMin - best.monthlyMin;
+    const totalSave = monthlySave * 12 * r.years;
+    msg += `💡 <b>ХЭМНЭЛТ:</b>\n`;
+    msg += `Хамгийн өндөр хүүтэй (${worst.mn} ${fmtD(worst.min, 1)}%) → сард ${c}${fmt(worst.monthlyMin)}\n`;
+    msg += `Зөв банк сонгосноор <b>${r.years} жилд ${c}${fmt(totalSave)} хэмнэнэ!</b> 🎉\n`;
+  }
+  msg += `━━━━━━━━━━━━━━━━━━\n`;
+
+  // 3. Бусад банкууд
+  msg += `📊 <b>БУСАД БАНКУУД (Сард төлөх):</b>\n`;
+  const showBanks = r.banks.slice(1, 6);
+  showBanks.forEach((b, i) => {
+    const lv = b.source === 'api' ? '🔴' : '';
+    msg += `${i + 2}. ${b.mn}${lv}: ${c}${fmt(b.monthlyMin)} (${fmtD(b.min, 1)}%)\n`;
+  });
+
+  msg += disclaimer();
+  return msg;
+}
+
 module.exports = {
   fmt, fmtD, FLAGS, NAMES,
   getOfficial,
   convertCurrency, formatConversion,
-  calcMonthlyPayment,
-  calculateMortgage, formatMortgage,
+  calcMonthlyPayment, calcReducingBalance,
+  calculateMortgage, formatMortgage, formatSmartMortgage,
   calculatePersonalLoan, formatPersonalLoan,
   calculateCarImport, formatCarImport,
   formatMortgageRates, formatPersonalRates, formatCarRates, formatAllRates,
