@@ -1,12 +1,16 @@
-// 🦁 KhaanRate v8 — Unified, Correct, Consistent
+// 🦁 KhaanRate v12 — Financial Data Hub
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
-const { fetchAll, buildOfficial, CURRENCIES } = require('./bank-rates');
+const { fetchAll, buildOfficial, startBackgroundRefresh, CURRENCIES } = require('./bank-rates');
 const { addReferralButtons, businessReport, getAd } = require('./monetize');
 const { BOT_USERNAME, CHANNEL } = require('./revenue');
+const cache = require('./cache');
 const U = require('./unified');
+
+// Start background rate refresh (15min interval)
+startBackgroundRefresh(15 * 60 * 1000);
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -16,6 +20,29 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 const send = (id, text, opts) => bot.sendMessage(id, text, { parse_mode: 'HTML', ...opts });
+
+// ─── Share button builder ────────────────────────────────────────
+function shareBtn(label, text) {
+  const shareText = encodeURIComponent(text || label);
+  return { inline_keyboard: [[
+    { text: '📤 Хуваалцах', url: `https://t.me/share/url?url=https://t.me/${BOT_USERNAME}&text=${shareText}` }
+  ]]};
+}
+
+// ─── Affiliate links (context-aware) ──────────────────────────────
+const AFFILIATES = {
+  remit:   { text: '💸 Wise-р мөнгө илгээх', url: 'https://wise.com/invite/u/cl7w1' },
+  lendmn:  { text: '📱 LendMN онлайн зээл', url: 'https://lendmn.mn' },
+  car_ins: { text: '🚗 Даатгалын харьцуулалт', url: 'https://mip.mn' },
+};
+
+function affiliateBtns(context) {
+  const btns = [];
+  if (['usd','eur','krw','gbp'].includes(context)) btns.push(AFFILIATES.remit);
+  if (context === 'credit' || context === 'loan') btns.push(AFFILIATES.lendmn);
+  if (context === 'car') btns.push(AFFILIATES.car_ins);
+  return btns.length ? { inline_keyboard: [btns.map(b => ({ text: b.text, url: b.url }))] } : null;
+}
 
 // ─── Main menu — CONVERTER-FIRST ────────────────────────────────
 const MAIN_MENU = {
@@ -96,7 +123,12 @@ bot.onText(/^(\d[\d,.]*)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)(?:\s+(usd|cny|eur|r
   const from = match[2].toLowerCase();
   const to = match[3]?.toLowerCase();
   const result = await U.convertCurrency(amount, from, to || null);
-  send(msg.chat.id, U.formatConversion(result));
+  const convText = U.formatConversion(result);
+  const shareUrl = `https://t.me/share/url?url=https://t.me/${BOT_USERNAME}&text=${encodeURIComponent('Би @KhaanRateBot дээр ' + fmt(amount) + ' ' + from.toUpperCase() + ' хөрвүүлж ₮' + fmt(result.mntAmount) + ' хэмнэлт оллоо!')}`;
+  const affBtns = affiliateBtns(from);
+  const btns = [{ text: '📤 Хуваалцах', url: shareUrl }];
+  if (affBtns?.inline_keyboard) btns.push(...affBtns.inline_keyboard[0]);
+  send(msg.chat.id, convText, { reply_markup: { inline_keyboard: [btns] } });
 });
 
 // Smart loan converter — "80сая зээл", "5сая кредит 12", "зээл 80000000 30 20"

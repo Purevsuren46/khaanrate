@@ -1,0 +1,22 @@
+{
+  "vat": 10,
+  "excise": {
+    "engine_cc": [
+      { "min": 0, "max": 1500, "rate": 0 },
+      { "min": 1500, "max": 2000, "rate": 375 },
+      { "min": 2000, "max": 2500, "rate": 750 },
+      { "min": 2500, "max": 3000, "rate": 1500 },
+      { "min": 3000, "max": 4000, "rate": 2250 },
+      { "min": 4000, "max": 99999, "rate": 3750 }
+    ],
+    "hybrid_discount_pct": 50,
+    "electric_exempt": true
+  },
+  "transport": {
+    "port": 500,
+    "registration": 0,
+    "inspection": 0
+  },
+  "customs_duty_pct": 5,
+  "last_updated": "2026-04-15"
+}

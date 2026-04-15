@@ -103,14 +103,15 @@ function formatConversion(r) {
     const c = r.currency;
     const cheapest = r.allSellBanks?.[0];
     const cheapMnt = cheapest ? r.amount * cheapest.rates[c].sell : r.mntAmount;
+    const now = new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Ulaanbaatar'});
 
     // HEADER — the answer
     let msg = `${FLAGS[c]} <b>${fmt(r.amount)} ${c.toUpperCase()} = ₮${fmt(cheapMnt)}</b>\n`;
-    msg += `Албан: ₮${fmt(r.officialRate)}/${c.toUpperCase()}\n\n`;
+    msg += `Албан: ₮${fmt(r.officialRate)}/${c.toUpperCase()} | 🕐 ${now}\n\n`;
 
     // Bank comparison — ONE LINE each
     if (r.allSellBanks?.length) {
-      msg += `🏦 Авах үнэ:\n`;
+      msg += `🏦 📤 <b>Таны зарах үнэ</b>:\n`;
       r.allSellBanks.forEach((b, i) => {
         const bankMnt = r.amount * b.rates[c].sell;
         const icon = i === 0 ? '🏆' : '  ';
@@ -146,6 +147,16 @@ function calcMonthlyPayment(principal, annualRatePct, years) {
   if (r === 0) return principal / n;
   const factor = Math.pow(1 + r, n);
   return principal * (r * factor) / (factor - 1);
+}
+
+// Reducing Balance (Differential) — first month payment
+function calcReducingBalance(principal, annualRatePct, years) {
+  const r = annualRatePct / 100 / 12;
+  const n = years * 12;
+  if (r === 0) return principal / n;
+  const principalPart = principal / n;
+  const firstInterest = principal * r;
+  return principalPart + firstInterest; // first month
 }
 
 // Bank mortgage rates — verified against bank websites
