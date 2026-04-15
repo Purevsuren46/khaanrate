@@ -172,8 +172,10 @@ function calcReducingBalance(principal, annualRatePct, years) {
 // Bank mortgage rates — verified against bank websites
 const MORTGAGE_RATES = [
   { bank: 'Хаан Банк', mn: '🏦 Хаан Банк', mnt: {min:10.8, max:14.4}, usd: {min:6.0, max:9.0}, maxYears:30, minDown:20, fee:0.5 },
+  { bank: 'Төрийн Банк (6% хөтөлбөр)', mn: '🏛️ Төрийн Банк 6%', mnt: {min:6.0, max:8.12}, usd: {min:5.0, max:7.0}, maxYears:30, minDown:30, fee:1.0, note:'Төрийн хөтөлбөр' },
   { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', mnt: {min:12.0, max:15.0}, usd: {min:7.0, max:10.0}, maxYears:30, minDown:20, fee:1.0 },
-  { bank: 'Голомт Банк', mn: '🏦 Голомт Банк', mnt: {min:14.0, max:18.0}, usd: {min:8.0, max:12.0}, maxYears:25, minDown:20, fee:1.5 },
+  { bank: 'Голомт Банк (8% хөтөлбөр)', mn: '🏦 Голомт Банк 8%', mnt: {min:8.0, max:8.0}, usd: {min:6.0, max:8.0}, maxYears:30, minDown:20, fee:1.5, note:'Төрийн хөтөлбөр' },
+  { bank: 'Голомт Банк', mn: '🏦 Голомт Банк', mnt: {min:14.0, max:20.4}, usd: {min:8.0, max:12.0}, maxYears:25, minDown:20, fee:1.5 },
   { bank: 'ХХБ', mn: '🏦 ХХБ', mnt: {min:14.5, max:18.0}, usd: {min:12.5, max:16.0}, maxYears:20, minDown:30, fee:1.5 },
   { bank: 'Капитрон Банк', mn: '🏦 Капитрон Банк', mnt: {min:15.0, max:20.0}, usd: {min:13.0, max:17.0}, maxYears:20, minDown:25, fee:1.0 },
 ];
@@ -358,7 +360,8 @@ function formatMortgage(r) {
 // ═══════════════════════════════════════════════════════════════════
 
 const PERSONAL_RATES = [
-  { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', annual: 18.0, minSalary: 500000, type: 'bank', maxMonths: 24 },
+  { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', annual: 18.0, minSalary: 500000, type: 'bank', maxMonths: 30 },
+  { bank: 'Хаан Банк', mn: '🏦 Хаан Банк', annual: 18.0, minSalary: 500000, type: 'bank', maxMonths: 36 },
   { bank: 'Хас Банк', mn: '💚 Хас Банк', annual: 19.2, minSalary: 600000, type: 'bank', maxMonths: 36 },
   { bank: 'Голомт Банк', mn: '🏦 Голомт Банк', annual: 21.6, minSalary: 800000, type: 'bank', maxMonths: 24 },
   { bank: 'LendMN', mn: '📱 LendMN', annual: 30.0, minSalary: 500000, type: 'online', maxMonths: 12, url: 'https://lendmn.mn' },

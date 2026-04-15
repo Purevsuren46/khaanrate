@@ -16,14 +16,16 @@ function randUA() { return UA_LIST[Math.floor(Math.random() * UA_LIST.length)]; 
 const FALLBACK = {
   mortgage: [
     { bank: 'Хаан Банк', mn: '🏦 Хаан Банк', rateMin: 10.8, rateMax: 14.4, maxYears: 30, minDown: 20, fee: 0.5, source: 'fallback' },
+    { bank: 'Төрийн Банк (6% хөтөлбөр)', mn: '🏛️ Төрийн Банк 6%', rateMin: 6.0, rateMax: 8.12, maxYears: 30, minDown: 30, fee: 1.0, source: 'fallback', note: 'Төрийн хөтөлбөр, бодит 8.12%' },
     { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', rateMin: 12.0, rateMax: 15.0, maxYears: 30, minDown: 20, fee: 1.0, source: 'fallback' },
-    { bank: 'Голомт Банк', mn: '🏦 Голомт Банк', rateMin: 14.0, rateMax: 18.0, maxYears: 25, minDown: 20, fee: 1.5, source: 'fallback' },
+    { bank: 'Голомт Банк (8% хөтөлбөр)', mn: '🏦 Голомт Банк 8%', rateMin: 8.0, rateMax: 8.0, maxYears: 30, minDown: 20, fee: 1.5, source: 'fallback', note: 'Төрийн хөтөлбөр' },
+    { bank: 'Голомт Банк', mn: '🏦 Голомт Банк', rateMin: 14.0, rateMax: 20.4, maxYears: 25, minDown: 20, fee: 1.5, source: 'fallback' },
     { bank: 'ХХБ', mn: '🏦 ХХБ', rateMin: 14.5, rateMax: 18.0, maxYears: 20, minDown: 30, fee: 1.5, source: 'fallback' },
     { bank: 'Капитрон Банк', mn: '🏦 Капитрон Банк', rateMin: 15.0, rateMax: 20.0, maxYears: 20, minDown: 25, fee: 1.0, source: 'fallback' },
   ],
   personal: [
+    { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', rateMin: 14.4, rateMax: 22.8, minSalary: 500000, maxMonths: 30, source: 'fallback' },
     { bank: 'Хаан Банк', mn: '🏦 Хаан Банк', rateMin: 14.4, rateMax: 18.0, minSalary: 500000, maxMonths: 36, source: 'fallback' },
-    { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', rateMin: 15.0, rateMax: 18.0, minSalary: 500000, maxMonths: 24, source: 'fallback' },
     { bank: 'Хас Банк', mn: '💚 Хас Банк', rateMin: 19.2, rateMax: 19.2, minSalary: 600000, maxMonths: 36, source: 'fallback' },
     { bank: 'Голомт Банк', mn: '🏦 Голомт Банк', rateMin: 18.0, rateMax: 21.6, minSalary: 800000, maxMonths: 24, source: 'fallback' },
     { bank: 'LendMN', mn: '📱 LendMN', rateMin: 24.0, rateMax: 30.0, minSalary: 500000, maxMonths: 12, source: 'fallback', type: 'online' },
@@ -206,9 +208,9 @@ async function fetchGolomtLoans() {
 
     // If no structured data found, try extracting from raw text
     if (mortgage.length === 0 && rateRanges.length > 0) {
-      // Golomt's "6%" is likely a credit line monthly rate, not mortgage annual
-      // Only use rates that look like annual mortgage rates (>8%)
-      const mr = rateRanges.find(r => r.min >= 8 && r.max <= 30);
+      // Golomt's "6%" is a government program rate, not standard mortgage
+      // Standard mortgage rates are 12-20%+ range
+      const mr = rateRanges.find(r => r.min >= 10 && r.max <= 30);
       if (mr) {
         mortgage.push({
           bank: 'Голомт Банк', mn: '🏦 Голомт Банк',

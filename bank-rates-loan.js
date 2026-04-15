@@ -10,12 +10,13 @@ function num(n) { return Number(n).toLocaleString('en-US', { maximumFractionDigi
 const KNOWN_RATES = {
   mortgage: {
     mnt: [
-      { bank: 'Хаан Банк', mn: 'Хаан Банк', min: 10.8, max: 14.4, maxYears: 30, minDown: 20, fee: 0.5, source: 'website', url: 'https://www.khanbank.com/mn/retail/loans' },
-      { bank: 'Голомт Банк', mn: 'Голомт Банк', min: 14.0, max: 18.0, maxYears: 25, minDown: 20, fee: 1.5, source: 'website', url: 'https://www.golomtbank.com/mn/individual/loans/housing-loan' },
-      { bank: 'Төрийн Банк', mn: 'Төрийн Банк', min: 12.0, max: 15.0, maxYears: 30, minDown: 20, fee: 1.0, source: 'website', url: 'https://www.statebank.mn/mn/loans' },
-      { bank: 'ХХБ', mn: 'ХХБ', min: 14.5, max: 18.0, maxYears: 20, minDown: 30, fee: 1.5, source: 'website', url: 'https://www.bogdbank.mn' },
-      { bank: 'Капитрон Банк', mn: 'Капитрон Банк', min: 15.0, max: 20.0, maxYears: 20, minDown: 25, fee: 1.0, source: 'website', url: 'https://www.capitronbank.mn' },
-      { bank: 'Худалдаа Хөгжлийн Банк', mn: 'ХХБ (ТДБ)', min: 12.0, max: 16.0, maxYears: 25, minDown: 20, fee: 1.0, source: 'website', url: 'https://www.tdbm.mn' },
+      { bank: 'Хаан Банк', mn: 'Хаан Банк', min: 10.8, max: 14.4, maxYears: 30, minDown: 20, fee: 0.5, source: 'website' },
+      { bank: 'Төрийн Банк (6% хөтөлбөр)', mn: 'Төрийн Банк 6%', min: 6.0, max: 8.12, maxYears: 30, minDown: 30, fee: 1.0, source: 'website', note: 'Бодит 8.12%' },
+      { bank: 'Төрийн Банк', mn: 'Төрийн Банк', min: 12.0, max: 15.0, maxYears: 30, minDown: 20, fee: 1.0, source: 'website' },
+      { bank: 'Голомт Банк (8% хөтөлбөр)', mn: 'Голомт Банк 8%', min: 8.0, max: 8.0, maxYears: 30, minDown: 20, fee: 1.5, source: 'website', note: 'Төрийн хөтөлбөр' },
+      { bank: 'Голомт Банк', mn: 'Голомт Банк', min: 14.0, max: 20.4, maxYears: 25, minDown: 20, fee: 1.5, source: 'website' },
+      { bank: 'ХХБ', mn: 'ХХБ', min: 14.5, max: 18.0, maxYears: 20, minDown: 30, fee: 1.5, source: 'website' },
+      { bank: 'Капитрон Банк', mn: 'Капитрон Банк', min: 15.0, max: 20.0, maxYears: 20, minDown: 25, fee: 1.0, source: 'website' },
     ],
     usd: [
       { bank: 'Хаан Банк', mn: 'Хаан Банк', min: 6.0, max: 9.0, maxYears: 15, minDown: 30, fee: 0.5, source: 'website' },
@@ -25,11 +26,11 @@ const KNOWN_RATES = {
   },
   personal: {
     mnt: [
-      { bank: 'LendMN', mn: 'LendMN 📱', min: 24.0, max: 30.0, minSalary: 500000, type: 'online', url: 'https://lendmn.mn' },
-      { bank: 'And Global', mn: 'And Global 📱', min: 24.0, max: 33.6, minSalary: 400000, type: 'online', url: 'https://and.mn' },
+      { bank: 'Төрийн Банк', mn: 'Төрийн Банк', min: 14.4, max: 22.8, minSalary: 500000, type: 'bank' },
       { bank: 'Хаан Банк', mn: 'Хаан Банк', min: 14.4, max: 18.0, minSalary: 500000, type: 'bank' },
       { bank: 'Голомт Банк', mn: 'Голомт Банк', min: 18.0, max: 21.6, minSalary: 800000, type: 'bank' },
-      { bank: 'Төрийн Банк', mn: 'Төрийн Банк', min: 15.0, max: 18.0, minSalary: 500000, type: 'bank' },
+      { bank: 'LendMN', mn: 'LendMN 📱', min: 24.0, max: 30.0, minSalary: 500000, type: 'online', url: 'https://lendmn.mn' },
+      { bank: 'And Global', mn: 'And Global 📱', min: 24.0, max: 33.6, minSalary: 400000, type: 'online', url: 'https://and.mn' },
     ]
   },
   car: {
