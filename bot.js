@@ -108,7 +108,8 @@ bot.onText(/\/start/, async msg => {
   greeting += `💵 Ханш → хамгийн хямд банк\n`;
   greeting += `🏠 Зээл → ипотек + кредит\n`;
   greeting += `🚗 Машин → импорт + татвар\n`;
-  greeting += `⚙️ Бусад → мэдэгдэл + илгээх`;
+  greeting += `⚙️ Бусад → мэдэгдэл + илгээх\n\n`;
+  greeting += `⚠️ <i>Анхаар: Энэхүү тооцооллууд нь ойролцоо утга бөгөөд албан ёсны баримт бичиг болохгүй. Яг тодорхой ханш, зээлийн нөхцөлийг холбогдох банкнаас лавлана уу.</i>`;
   send(msg.chat.id, greeting, MAIN_MENU);
   if (supabase) supabase.from('users').upsert({chat_id:msg.chat.id,username:msg.chat.username,first_name:msg.chat.first_name},{onConflict:'chat_id'}).then(()=>{});
 });

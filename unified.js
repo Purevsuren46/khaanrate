@@ -14,6 +14,16 @@ function fmtD(n, d=1) {
   return Number(n).toFixed(d);
 }
 
+// Timestamp (Ulaanbaatar time)
+function ts() {
+  return new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Ulaanbaatar'});
+}
+
+// Legal disclaimer
+function disclaimer() {
+  return '\n\n⚠️ <i>Анхаар: Энэхүү тооцооллууд нь ойролцоо утга бөгөөд албан ёсны баримт бичиг болохгүй. Яг тодорхой ханш, зээлийн нөхцөлийг холбогдох банкнаас лавлана уу.</i>';
+}
+
 const FLAGS = {usd:'🇺🇸',cny:'🇨🇳',eur:'🇪🇺',rub:'🇷🇺',jpy:'🇯🇵',krw:'🇰🇷',gbp:'🇬🇧'};
 const NAMES = {usd:'Америк доллар',cny:'Хятад юань',eur:'Евро',rub:'Орос рубль',jpy:'Япон иен',krw:'Солонгос вон',gbp:'Англи фунт'};
 
@@ -111,7 +121,7 @@ function formatConversion(r) {
 
     // Bank comparison — ONE LINE each
     if (r.allSellBanks?.length) {
-      msg += `🏦 📤 <b>Таны зарах үнэ</b>:\n`;
+      msg += `🏦 📤 <b>ТАНЫ ЗАРАХ</b> (доллар зарж MNT авна):\n`;
       r.allSellBanks.forEach((b, i) => {
         const bankMnt = r.amount * b.rates[c].sell;
         const icon = i === 0 ? '🏆' : '  ';
@@ -129,10 +139,10 @@ function formatConversion(r) {
     // Best sell price
     if (r.bestBuy) {
       const sellMnt = r.amount * r.bestBuy.rates[c].buy;
-      msg += `\n📈 Зарах: ${r.bestBuy.mn} → ₮${fmt(sellMnt)}`;
+      msg += `\n📈 <b>ТАНЫ АВАХ</b>: ${r.bestBuy.mn} → ₮${fmt(sellMnt)}`;
     }
 
-    return msg;
+    return msg + disclaimer();
   }
 }
 
@@ -296,7 +306,7 @@ async function calculateMortgage({ propertyPrice, downPct, years, salary, curren
 
 function formatMortgage(r) {
   const c = r.currency === 'usd' ? '$' : '₮';
-  let msg = `🏠 <b>ЗЭЭЛ — САРЫН ТӨЛБӨР</b>\n\n`;
+  let msg = `🏠 <b>ИПОТЕКИЙН ЗЭЭЛ — САРЫН ТӨЛБӨР</b>\n\n`;
   msg += `Үл хөдлөх: ${c}${fmt(r.propertyPrice)} | Урьдчилгаа: ${r.downPct}%\n`;
   msg += `Зээл: <b>${c}${fmt(r.loanAmount)}</b> | ${r.years} жил`;
   if (r.salary) msg += ` | Цалин: ₮${fmt(r.salary)}`;
@@ -306,7 +316,8 @@ function formatMortgage(r) {
     return msg + `❌ Зээл олгох банк олдсонгүй.\n💡 Урьдчилгаа нэмэгдүүлэх эсвэл хугацаа уртасгана уу.`;
   }
 
-  // Show top 5 banks, ONE LINE each
+  // ─── Annuity (Тэгш төлбөр) ──────────────────────────
+  msg += `📐 <b>Тэгш төлбөр (Аннуит):</b>\n`;
   const show = r.banks.slice(0, 5);
   for (const b of show) {
     const trophy = b === show[0] ? '🏆' : '  ';
@@ -318,12 +329,27 @@ function formatMortgage(r) {
     msg += line + '\n';
   }
 
+  // ─── Reducing Balance (Бүрэлдэхүүн) ────────────────
+  msg += `\n📉 <b>Бүрэлдэхүүн төлбөр (Эхний сар → Сүүлийн сар):</b>\n`;
+  for (const b of show) {
+    const trophy = b === show[0] ? '🏆' : '  ';
+    const live = b.source === 'api' ? '🔴' : '';
+    const firstMin = calcReducingBalance(r.loanAmount, b.min, r.years);
+    const firstMax = calcReducingBalance(r.loanAmount, b.max, r.years);
+    const lastMin = calcMonthlyPayment(r.loanAmount, b.min, r.years); // approx last payment
+    let line = `${trophy} ${b.mn}${live}: ${c}${fmt(firstMin)}`;
+    if (firstMax !== firstMin) line += `—${c}${fmt(firstMax)}`;
+    line += ` → ${c}${fmt(lastMin)}/сар`;
+    msg += line + '\n';
+  }
+
   const best = r.banks[0];
   const worst = r.banks[r.banks.length - 1];
   if (worst.mn !== best.mn) {
     const save = worst.monthlyMin - best.monthlyMin;
     msg += `\n💰 ${best.mn}-р ${r.years} жилд ${c}${fmt(save * 12 * r.years)} хэмнэнэ`;
   }
+  msg += disclaimer();
   return msg;
 }
 
@@ -352,14 +378,25 @@ async function calculatePersonalLoan({ amount, months, salary }) {
 }
 
 function formatPersonalLoan(r) {
-  let msg = `💳 <b>КРЕДИТ — САРЫН ТӨЛБӨР</b>\n\n`;
+  let msg = `💳 <b>ЦАЛИНГИЙН ЗЭЭЛ — САРЫН ТӨЛБӨР</b>\n\n`;
   msg += `Зээл: <b>₮${fmt(r.amount)}</b> | ${r.months} сар | Цалин: ₮${fmt(r.salary)}\n\n`;
 
   if (!r.banks.length) return msg + `❌ Таны цалингаар зээл авах боломжгүй.\n💡 Хэмжээг багасгана уу.`;
 
+  // Annuity
+  msg += `📐 <b>Тэгш төлбөр (Аннуит):</b>\n`;
   for (const b of r.banks) {
     const trophy = b === r.banks[0] ? '🏆' : '  ';
     msg += `${trophy} ${b.mn}: <b>₮${fmt(b.monthly)}</b>/сар (${fmtD(b.annual,1)}%)\n`;
+  }
+
+  // Reducing Balance
+  msg += `\n📉 <b>Бүрэлдэхүүн төлбөр (Эхний сар → Сүүлийн сар):</b>\n`;
+  for (const b of r.banks) {
+    const trophy = b === r.banks[0] ? '🏆' : '  ';
+    const first = calcReducingBalance(r.amount, b.annual, r.months / 12);
+    const last = calcMonthlyPayment(r.amount, b.annual, r.months / 12);
+    msg += `${trophy} ${b.mn}: ₮${fmt(first)} → ₮${fmt(last)}/сар\n`;
   }
 
   const best = r.banks[0];
@@ -368,6 +405,7 @@ function formatPersonalLoan(r) {
     const save = worst.monthly * r.months - best.monthly * r.months;
     msg += `\n💰 ${best.mn}-р ${r.months} сард ₮${fmt(save)} хэмнэнэ`;
   }
+  msg += disclaimer();
   return msg;
 }
 
