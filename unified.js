@@ -725,6 +725,90 @@ function formatSmartMortgage(r) {
   return msg;
 }
 
+function formatBusinessRates() {
+  const rates = [
+    { mn: '🏛️ Төрийн Банк', min: 10.0, max: 16.0, maxYears: 10, minCollateral: 110, fee: 1.0, desc: 'Бизнесийн зээл' },
+    { mn: '🏦 Хаан Банк', min: 12.0, max: 18.0, maxYears: 5, minCollateral: 100, fee: 1.0, desc: 'Бизнесийн зээл' },
+    { mn: '🏦 ХХБ (ТДБ)', min: 13.0, max: 19.0, maxYears: 7, minCollateral: 120, fee: 1.0, desc: 'Бизнесийн зээл' },
+    { mn: '🏦 Транс Банк', min: 14.0, max: 20.0, maxYears: 5, minCollateral: 100, fee: 1.0, desc: 'SME зээл' },
+    { mn: '🏦 Голомт Банк', min: 14.0, max: 22.8, maxYears: 5, minCollateral: 100, fee: 1.0, desc: 'SME зээл' },
+    { mn: '💚 Хас Банк', min: 15.0, max: 21.0, maxYears: 5, minCollateral: 100, fee: 1.5, desc: 'SME зээл' },
+    { mn: '🏦 Капитрон Банк', min: 16.0, max: 24.0, maxYears: 3, minCollateral: 110, fee: 1.5, desc: 'Бизнесийн зээл' },
+    { mn: '📱 LendMN', min: 24.0, max: 36.0, maxYears: 2, minCollateral: 0, fee: 0, desc: 'Онлайн бизнес зээл', type: 'online' },
+  ].sort((a,b) => a.min - b.min);
+
+  let msg = `🏢 <b>БИЗНЕСИЙН ЗЭЭЛИЙН ХҮҮ</b>\n\n`;
+  for (const r of rates) {
+    const win = r.min === rates[0].min ? '🏆' : '   ';
+    const icon = r.type === 'online' ? '📱' : '🏦';
+    const collateral = r.minCollateral > 0 ? ` | ${r.minCollateral}% барьцаа` : ' | Барьцаагүй';
+    msg += `${win} ${r.mn} <b>${fmtD(r.min,1)}% — ${fmtD(r.max,1)}%</b>/жил | ${r.maxYears} жил${collateral}\n`;
+    msg += `      ${r.desc}${r.fee>0?` | ${r.fee}% гэрээний хураамж`:''}\n`;
+  }
+  msg += `\n🏆 Хамгийн хямд: ${rates[0].mn} ${fmtD(rates[0].min,1)}%/жил`;
+  msg += disclaimer();
+  return msg;
+}
+
+function calculateBusinessLoan({ amount, months, collateralPct }) {
+  const rates = [
+    { mn: '🏛️ Төрийн Банк', min: 10.0, max: 16.0, maxYears: 10, minCollateral: 110, fee: 1.0 },
+    { mn: '🏦 Хаан Банк', min: 12.0, max: 18.0, maxYears: 5, minCollateral: 100, fee: 1.0 },
+    { mn: '🏦 ХХБ (ТДБ)', min: 13.0, max: 19.0, maxYears: 7, minCollateral: 120, fee: 1.0 },
+    { mn: '🏦 Транс Банк', min: 14.0, max: 20.0, maxYears: 5, minCollateral: 100, fee: 1.0 },
+    { mn: '🏦 Голомт Банк', min: 14.0, max: 22.8, maxYears: 5, minCollateral: 100, fee: 1.0 },
+    { mn: '💚 Хас Банк', min: 15.0, max: 21.0, maxYears: 5, minCollateral: 100, fee: 1.5 },
+    { mn: '🏦 Капитрон Банк', min: 16.0, max: 24.0, maxYears: 3, minCollateral: 110, fee: 1.5 },
+    { mn: '📱 LendMN', min: 24.0, max: 36.0, maxYears: 2, minCollateral: 0, fee: 0, type: 'online' },
+  ].sort((a,b) => a.min - b.min);
+
+  const years = months / 12;
+  const banks = rates.filter(r => years <= r.maxYears).map(r => {
+    const monthly = calcMonthlyPayment(amount, r.min, years);
+    const total = monthly * months;
+    const feeAmt = r.fee > 0 ? amount * r.fee / 100 : 0;
+    return {
+      ...r, monthlyMin: Math.round(monthly),
+      totalMin: Math.round(total), feeAmt: Math.round(feeAmt),
+      annualMin: r.min
+    };
+  }).sort((a,b) => a.monthlyMin - b.monthlyMin);
+
+  return { amount, months, banks };
+}
+
+function formatBusinessLoan(r) {
+  let msg = `🏢 <b>БИЗНЕСИЙН ЗЭЭЛ</b>\n\n`;
+  msg += `📋 Зээлийн дүн: <b>₮${fmt(r.amount)}</b> | ${r.months} сар\n`;
+  msg += `━━━━━━━━━━━━━━━━━━\n`;
+
+  if (!r.banks.length) {
+    return msg + `❌ Энэ хугацаанд зээл олгох банк олдсонгүй. Хугацаагаа богиносгоно уу.`;
+  }
+
+  const best = r.banks[0];
+  const worst = r.banks[r.banks.length - 1];
+
+  msg += `🏆 <b>ШИЛДЭГ СОНГОЛТ:</b>\n`;
+  msg += `<b>${best.mn}</b> (${fmtD(best.annualMin,1)}%/жил)\n`;
+  msg += `Сард төлөх: <b>₮${fmt(best.monthlyMin)}</b>\n`;
+  if (best.feeAmt > 0) msg += `Гэрээний хураамж: ₮${fmt(best.feeAmt)}\n`;
+
+  if (r.banks.length > 1) {
+    const monthlySave = worst.monthlyMin - best.monthlyMin;
+    const totalSave = monthlySave * r.months;
+    if (totalSave > 0) msg += `\n💡 ${r.months} сард <b>₮${fmt(totalSave)} хэмнэнэ!</b> 🎉\n`;
+    msg += `━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📊 <b>Бусад банк:</b>\n`;
+    for (let i = 1; i < r.banks.length; i++) {
+      const b = r.banks[i];
+      msg += `${b.mn}: ₮${fmt(b.monthlyMin)}/сар (${fmtD(b.annualMin,1)}%)\n`;
+    }
+  }
+  msg += disclaimer();
+  return msg;
+}
+
 module.exports = {
   fmt, fmtD, FLAGS, NAMES, disclaimer,
   getOfficial,
@@ -732,6 +816,7 @@ module.exports = {
   calcMonthlyPayment, calcReducingBalance,
   calculateMortgage, formatMortgage, formatSmartMortgage,
   calculatePersonalLoan, formatPersonalLoan,
+  calculateBusinessLoan, formatBusinessLoan, formatBusinessRates,
   calculateCarImport, formatCarImport,
   formatMortgageRates, formatPersonalRates, formatCarRates, formatAllRates,
   MORTGAGE_RATES, PERSONAL_RATES, EXCISE_PER_CC, TRANSPORT_COST, COUNTRY_LABELS

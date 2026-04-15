@@ -133,8 +133,8 @@ bot.onText(/^(\d[\d,.]*)\s*(usd|mnt|cny|eur|rub|jpy|krw|gbp)(?:\s+(usd|cny|eur|r
 });
 
 // Smart loan converter — Human-like input
-// Patterns: "100сая ипотек 20жил 30%", "5сая кредит 12", "80сая байр", "зээл 80000000 30 20"
-bot.onText(/^(?:(\d[\d,.]*)\s*(сая|м|мянга|s)?\s*(ипотек|байр|зээл|кредит|credit|mortgage)(?:\s*(\d+)\s*(?:жил|ж|j))?\s*(?:(\d+)\s*(?:хувь|%))?|зээл\s+(\d[\d,.]*)\s*(?:(\d+)\s*)?(?:(\d+)\s*)?(?:(\d[\d,.]*)\s*)?)$/i, async (msg, match) => {
+// Patterns: "100сая ипотек 20жил 30%", "5сая кредит 12", "80сая байр", "10сая бизнес 36", "зээл 80000000 30 20"
+bot.onText(/^(?:(\d[\d,.]*)\s*(сая|м|мянга|s)?\s*(ипотек|байр|зээл|кредит|credit|mortgage|бизнес|business)(?:\s*(\d+)\s*(?:жил|ж|j))?\s*(?:(\d+)\s*(?:хувь|%))?|зээл\s+(\d[\d,.]*)\s*(?:(\d+)\s*)?(?:(\d+)\s*)?(?:(\d[\d,.]*)\s*)?)$/i, async (msg, match) => {
   let amount = parseFloat((match[1] || match[6] || '0').replace(/,/g, ''));
   const unit = (match[2] || '').toLowerCase();
   const type = (match[3] || '').toLowerCase();
@@ -151,8 +151,15 @@ bot.onText(/^(?:(\d[\d,.]*)\s*(сая|м|мянга|s)?\s*(ипотек|байр
   if (amount < 100000) return;
 
   const isCredit = /кредит|credit/i.test(type);
+  const isBusiness = /бизнес|business/i.test(type);
 
-  if (isCredit) {
+  if (isBusiness) {
+    const months = parseInt(yearsArg || arg2) * (/сар/.test(yearsArg||'') ? 1 : 12) || parseInt(yearsArg || arg2) || 36;
+    try {
+      const result = U.calculateBusinessLoan({ amount, months });
+      send(msg.chat.id, U.formatBusinessLoan(result));
+    } catch(e) { send(msg.chat.id, '❌ Тооцоолж чадахгүй байна'); }
+  } else if (isCredit) {
     const months = parseInt(yearsArg || arg2) || 12;
     const salary = parseFloat(downArg || arg3) || 2000000;
     try {
@@ -296,8 +303,9 @@ bot.onText(/🏠 Зээл|\/mortgage|\/rates|\/хүү/, async msg => {
     [{text:'🏠 ₮50M',callback_data:'mort_50000000_30_20'},{text:'🏠 ₮80M',callback_data:'mort_80000000_30_20'}],
     [{text:'🏢 ₮120M',callback_data:'mort_120000000_30_25'},{text:'🏗️ ₮200M',callback_data:'mort_200000000_30_25'}],
     [{text:'💰 ₮1M кредит',callback_data:'cred_1000000_12_1500000'},{text:'💰 ₮5M кредит',callback_data:'cred_5000000_12_3000000'}],
+    [{text:'🏢 ₮10M бизнес',callback_data:'biz_10000000_36'},{text:'🏢 ₮50M бизнес',callback_data:'biz_50000000_60'}],
     [{text:'📊 Ипотекийн хүү',callback_data:'rates_mortgage_mnt'},{text:'📊 Кредитийн хүү',callback_data:'rates_personal'}],
-    [{text:'📊 Бүх хүү',callback_data:'rates_all'}]
+    [{text:'📊 Бизнесийн хүү',callback_data:'rates_business'},{text:'📊 Бүх хүү',callback_data:'rates_all'}],
   ]}});
 });
 
@@ -317,6 +325,13 @@ bot.onText(/\/credit\s+(\d+)\s+(\d+)\s+(\d+)/, async (msg, match) => {
   try {
     const result = await U.calculatePersonalLoan({ amount: parseFloat(match[1]), months: parseFloat(match[2]), salary: parseFloat(match[3]) });
     send(msg.chat.id, U.formatPersonalLoan(result));
+  } catch(e) { send(msg.chat.id, '❌ Тооцоолож чадахгүй байна'); }
+});
+
+bot.onText(/\/business\s+(\d+)\s+(\d+)/, (msg, match) => {
+  try {
+    const result = U.calculateBusinessLoan({ amount: parseFloat(match[1]), months: parseInt(match[2]) || 36 });
+    send(msg.chat.id, U.formatBusinessLoan(result));
   } catch(e) { send(msg.chat.id, '❌ Тооцоолож чадахгүй байна'); }
 });
 
@@ -411,6 +426,7 @@ bot.on('callback_query', async q => {
       if (type === 'mortgage_mnt') msg = await U.formatMortgageRates('mnt');
       else if (type === 'mortgage_usd') msg = await U.formatMortgageRates('usd');
       else if (type === 'personal') msg = U.formatPersonalRates();
+      else if (type === 'business') msg = U.formatBusinessRates();
       else if (type === 'car') msg = U.formatCarRates();
       else msg = await U.formatAllRates();
       send(chatId, msg);
@@ -510,6 +526,17 @@ bot.on('callback_query', async q => {
     try {
       const result = await U.calculatePersonalLoan({ amount: parseFloat(parts[0]), months: parseFloat(parts[1]), salary: parseFloat(parts[2]) });
       send(chatId, U.formatPersonalLoan(result));
+    } catch(e) { send(chatId, '❌ Алдаа'); }
+    return;
+  }
+
+  // Business loan quick
+  if (data.startsWith('biz_')) {
+    bot.answerCallbackQuery(q.id);
+    const parts = data.replace('biz_','').split('_');
+    try {
+      const result = U.calculateBusinessLoan({ amount: parseFloat(parts[0]), months: parseInt(parts[1]) || 36 });
+      send(chatId, U.formatBusinessLoan(result));
     } catch(e) { send(chatId, '❌ Алдаа'); }
     return;
   }

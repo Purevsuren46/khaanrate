@@ -37,9 +37,14 @@ const FALLBACK = {
     { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', rateMin: 14.0, rateMax: 17.0, maxYears: 7, minDown: 15, fee: 1.0, source: 'fallback' },
   ],
   business: [
-    { bank: 'Хаан Банк', mn: '🏦 Хаан Банк', rateMin: 12.0, rateMax: 18.0, maxYears: 5, fee: 1.0, source: 'fallback' },
-    { bank: 'Голомт Банк', mn: '🏦 Голомт Банк', rateMin: 18.0, rateMax: 22.8, maxYears: 5, fee: 1.0, source: 'fallback' },
-    { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', rateMin: 12.0, rateMax: 16.0, maxYears: 10, fee: 1.0, source: 'fallback' },
+    { bank: 'Хаан Банк', mn: '🏦 Хаан Банк', rateMin: 12.0, rateMax: 18.0, maxYears: 5, minCollateral: 100, fee: 1.0, source: 'fallback', desc: 'Бизнесийн зээл' },
+    { bank: 'Голомт Банк', mn: '🏦 Голомт Банк', rateMin: 14.0, rateMax: 22.8, maxYears: 5, minCollateral: 100, fee: 1.0, source: 'fallback', desc: 'SME зээл' },
+    { bank: 'Төрийн Банк', mn: '🏛️ Төрийн Банк', rateMin: 10.0, rateMax: 16.0, maxYears: 10, minCollateral: 110, fee: 1.0, source: 'fallback', desc: 'Бизнесийн зээл' },
+    { bank: 'Хас Банк', mn: '💚 Хас Банк', rateMin: 15.0, rateMax: 21.0, maxYears: 5, minCollateral: 100, fee: 1.5, source: 'fallback', desc: 'SME зээл' },
+    { bank: 'ХХБ (ТДБ)', mn: '🏦 ХХБ (ТДБ)', rateMin: 13.0, rateMax: 19.0, maxYears: 7, minCollateral: 120, fee: 1.0, source: 'fallback', desc: 'Бизнесийн зээл' },
+    { bank: 'Капитрон Банк', mn: '🏦 Капитрон Банк', rateMin: 16.0, rateMax: 24.0, maxYears: 3, minCollateral: 110, fee: 1.5, source: 'fallback', desc: 'Бизнесийн зээл' },
+    { bank: 'Транс Банк', mn: '🏦 Транс Банк', rateMin: 14.0, rateMax: 20.0, maxYears: 5, minCollateral: 100, fee: 1.0, source: 'fallback', desc: 'SME зээл' },
+    { bank: 'LendMN', mn: '📱 LendMN', rateMin: 24.0, rateMax: 36.0, maxYears: 2, minCollateral: 0, fee: 0, source: 'fallback', desc: 'Онлайн бизнес зээл', type: 'online' },
   ]
 };
 
