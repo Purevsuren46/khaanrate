@@ -3,6 +3,7 @@
 
 const axios = require('axios');
 const { fetchAll, buildOfficial } = require('./bank-rates');
+const { fetchAllLiveLoanRates } = require('./loan-scraper');
 function num(n) { return Number(n).toLocaleString('en-US',{maximumFractionDigits:0}); }
 
 // ─── XacBank Loan API ────────────────────────────────────────────
@@ -31,7 +32,47 @@ let cachedLoanRates = null;
 let loanCacheTime = 0;
 const LOAN_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
+
+
 async function fetchLoanRates() {
+  if (cachedLoanRates && Date.now() - loanCacheTime < LOAN_CACHE_TTL) return cachedLoanRates;
+  
+  try {
+    // Use live loan rates from all banks instead of just XacBank
+    const liveRates = await fetchAllLiveLoanRates();
+    
+    // Structure the data to match what the calculation functions expect
+    const rates = {
+      mortgage: liveRates.mortgage.map(bank => ({
+        ...bank,
+        // Ensure we have the right structure for calculations
+        rateMin: bank.rateMin,
+        rateMax: bank.rateMax,
+        // For backward compatibility with existing code
+        mn: bank.mn || bank.bank,
+        source: bank.source || "live_scrape"
+      })),
+      personal: liveRates.personal.map(bank => ({
+        ...bank,
+        // Convert annual rates to monthly for personal loans if needed
+        rateMonthly: bank.rateMin && bank.rateMin < 15 ? bank.rateMin : bank.rateMin / 12,
+        mn: bank.mn || bank.bank,
+        source: bank.source || "live_scrape"
+      }))
+    };
+    
+    cachedLoanRates = rates;
+    loanCacheTime = Date.now();
+    return rates;
+  } catch(e) {
+    console.error("Loan scraper error:", e.message?.substring(0, 50));
+    // Fallback to original fallback rates if scraping fails
+    cachedLoanRates = FALLBACK_RATES;
+    loanCacheTime = Date.now();
+    return FALLBACK_RATES;
+  }
+}
+
   if (cachedLoanRates && Date.now() - loanCacheTime < LOAN_CACHE_TTL) return cachedLoanRates;
   
   try {
@@ -275,6 +316,39 @@ function formatMortgage(r) {
 async function calculatePersonalLoan({ amount, months, salary }) {
   const rates = await fetchLoanRates();
   const official = await getRate();
+
+  // Handle both monthly and annual rate formats from live data
+  const results = rates.personal.map(bank => {
+    let monthlyRate;
+    if (bank.rateMonthly) {
+      // Already monthly rate
+      monthlyRate = bank.rateMonthly / 100;
+    } else if (bank.rateMin && bank.rateMin < 15) {
+      // Likely monthly rate (if < 15%)
+      monthlyRate = bank.rateMin / 100;
+    } else {
+      // Annual rate - convert to monthly
+      monthlyRate = (bank.rateMin / 100) / 12;
+    }
+    
+    const eligible = salary >= (bank.minSalary || 0);
+    const monthly = eligible ? monthlyPayment(amount, monthlyRate * 12, months / 12) : 0;
+    const total = monthly * months;
+    const totalInterest = total - amount;
+    
+    return { 
+      ...bank, 
+      eligible, 
+      monthly, 
+      total, 
+      totalInterest,
+      monthlyRate: monthlyRate * 100 // Store as percentage for display
+    };
+  }).filter(r => r.eligible).sort((a,b) => a.monthly - b.monthly);
+
+  return { amount, months, salary, banks: results, usdRate: official.usd || 3573 };
+}
+  const official = await getRate();
   
   const results = rates.personal.map(bank => {
     const monthlyRate = bank.rateMonthly / 100;
@@ -294,35 +368,53 @@ function formatPersonalLoan(r) {
   msg += `📋 Зээл: <b>₮${num(r.amount)}</b> ($${num(r.amount / r.usdRate)})\n`;
   msg += `Хугацаа: ${r.months} сар\n`;
   msg += `Цалин: ₮${num(r.salary)}/сар\n\n`;
-  
+
   if (!r.banks.length) {
     msg += `❌ Таны цалингаар зээл авах боломжгүй байна.`;
     return msg;
   }
-  
+
   msg += `🏦 <b>БОЛОМЖИТ ЗЭЭЛ:</b>\n\n`;
   r.banks.forEach((b, i) => {
     const trophy = i === 0 ? '🏆' : `${i+1}.`;
     const tag = b.type === 'online' ? '📱' : '🏦';
-    msg += `${trophy} ${tag} <b>${b.mn}</b> — ${b.rateMonthly}%/сар\n`;
+    const liveTag = b.source === 'live_api' || b.source === 'live_scrape' ? ' 🔴 LIVE' : '';
+    msg += `${trophy} ${tag} <b>${b.mn}</b>${liveTag} — `;
+
+    // Show rate appropriately
+    if (b.rateMonthly) {
+      msg += `${b.rateMonthly}%/сар\n`;
+    } else if (b.rateMin && b.rateMin < 15) {
+      msg += `${b.rateMin}%/сар\n`;
+    } else {
+      msg += `${(b.rateMin / 12).toFixed(2)}%/сар\n`;
+    }
+
     msg += `   Сарын төлбөр: <b>₮${num(b.monthly)}</b>\n`;
     msg += `   Нийт төлөх: ₮${num(b.total)}\n`;
     msg += `   Хүү: ₮${num(b.totalInterest)}\n\n`;
   });
-  
+
   const best = r.banks[0];
   msg += `━━━━━━━━━━━━━━━━━━━━\n`;
   msg += `🏆 <b>ШИЛДЭГ: ${best.mn}</b> — сард ₮${num(best.monthly)}\n`;
   msg += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-  
+
   msg += `📱 <b>ОНЛАЙН ЗЭЭЛ</b> — 15 минутад баталгаажна!\n`;
   r.banks.filter(b => b.type === 'online').forEach(b => {
-    msg += `• ${b.mn}: ${b.rateMonthly}%/сар\n`;
+    let rateDisplay;
+    if (b.rateMonthly) {
+      rateDisplay = `${b.rateMonthly}%/сар`;
+    } else if (b.rateMin && b.rateMin < 15) {
+      rateDisplay = `${b.rateMin}%/сар`;
+    } else {
+      rateDisplay = `${(b.rateMin / 12).toFixed(2)}%/сар`;
+    }
+    msg += `• ${b.mn}: ${rateDisplay}\n`;
   });
-  
+
   return msg;
 }
-
 async function getRate() {
   try {
     const banks = await fetchAll();
