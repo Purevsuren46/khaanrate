@@ -4,6 +4,7 @@
 const axios = require('axios');
 const { fetchAll, buildOfficial } = require('./bank-rates');
 const { fetchAllLiveLoanRates } = require('./loan-scraper');
+const { fetchAllLiveLoanRates } = require('./loan-scraper');
 function num(n) { return Number(n).toLocaleString('en-US',{maximumFractionDigits:0}); }
 
 // ─── XacBank Loan API ────────────────────────────────────────────
@@ -58,6 +59,16 @@ async function fetchLoanRates() {
         rateMonthly: bank.rateMin && bank.rateMin < 15 ? bank.rateMin : bank.rateMin / 12,
         mn: bank.mn || bank.bank,
         source: bank.source || "live_scrape"
+      })),
+      car: liveRates.car.map(bank => ({
+        ...bank,
+        mn: bank.mn || bank.bank,
+        source: bank.source || "live_scrape"
+      })),
+      business: liveRates.business.map(bank => ({
+        ...bank,
+        mn: bank.mn || bank.bank,
+        source: bank.source || "live_scrape"
       }))
     };
     
@@ -66,6 +77,43 @@ async function fetchLoanRates() {
     return rates;
   } catch(e) {
     console.error("Loan scraper error:", e.message?.substring(0, 50));
+    // Fallback to original fallback rates if scraping fails
+    cachedLoanRates = FALLBACK_RATES;
+    loanCacheTime = Date.now();
+    return FALLBACK_RATES;
+  }
+}
+  if (cachedLoanRates && Date.now() - loanCacheTime < LOAN_CACHE_TTL) return cachedLoanRates;
+  
+  try {
+    // Use live loan rates from all banks instead of just XacBank
+    const liveRates = await fetchAllLiveLoanRates();
+    
+    // Structure the data to match what the calculation functions expect
+    const rates = {
+      mortgage: liveRates.mortgage.map(bank => ({
+        ...bank,
+        // Ensure we have the right structure for calculations
+        rateMin: bank.rateMin,
+        rateMax: bank.rateMax,
+        // For backward compatibility with existing code
+        mn: bank.mn || bank.bank,
+        source: bank.source || 'live_scrape'
+      })),
+      personal: liveRates.personal.map(bank => ({
+        ...bank,
+        // Convert annual rates to monthly for personal loans if needed
+        rateMonthly: bank.rateMin && bank.rateMin < 15 ? bank.rateMin : bank.rateMin / 12,
+        mn: bank.mn || bank.bank,
+        source: bank.source || 'live_scrape'
+      }))
+    };
+    
+    cachedLoanRates = rates;
+    loanCacheTime = Date.now();
+    return rates;
+  } catch(e) {
+    console.error('Loan scraper error:', e.message?.substring(0, 50));
     // Fallback to original fallback rates if scraping fails
     cachedLoanRates = FALLBACK_RATES;
     loanCacheTime = Date.now();

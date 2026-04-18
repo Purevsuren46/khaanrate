@@ -356,13 +356,47 @@ bot.onText(/⚙️ Бусад/, async msg => {
 });
 
 
-bot.onText(/\/alert (\w+) (\d+\.?\d*)/, async (msg, match) => {
-  const currency = match[1].toLowerCase(); const target = parseFloat(match[2]);
-  if (!CURRENCIES.includes(currency)) { send(msg.chat.id,`❌ Боломжит: ${CURRENCIES.map(x=>x.toUpperCase()).join(', ')}`); return; }
+bot.onText(/\/alert (\w+) ([+-]?\d*\.?\d*)%?/, async (msg, match) => {
+  const currency = match[1].toLowerCase();
+  const rawTarget = match[2];
+  const isPercentage = match[0].endsWith('%');
+  
+  if (!CURRENCIES.includes(currency)) {
+    send(msg.chat.id, `❌ Боломжит: ${CURRENCIES.map(x=>x.toUpperCase()).join(', ')}`);
+    return;
+  }
+  
   const official = await U.getOfficial();
-  const direction = official?.[currency] < target ? 'above' : 'below';
-  if (supabase) await supabase.from('alerts').insert({chat_id:msg.chat.id, currency, target, direction});
-  send(msg.chat.id, `✅ ${U.FLAGS[currency]} ${currency.toUpperCase()} ₮${U.fmt(target)} ${direction==='above'?'дээш':'доош'} хүрвэл мэдэгдэнэ.\nОдоо: ₮${U.fmt(official?.[currency]||0)}`);
+  if (!official?.[currency]) {
+    send(msg.chat.id, `❌ ${currency.toUpperCase()} ханш олдсонгүй`);
+    return;
+  }
+  
+  let target, direction;
+  if (isPercentage) {
+    const percent = parseFloat(rawTarget);
+    const currentRate = official[currency];
+    target = currentRate * (1 + percent/100);
+    direction = percent >= 0 ? 'above' : 'below';
+  } else {
+    target = parseFloat(rawTarget);
+    direction = official?.[currency] < target ? 'above' : 'below';
+  }
+  
+  if (supabase) {
+    await supabase.from('alerts').insert({
+      chat_id: msg.chat.id,
+      currency,
+      target,
+      direction,
+      is_percentage: isPercentage,
+      original_target: isPercentage ? parseFloat(rawTarget) : null
+    });
+  }
+  
+  const targetDisplay = isPercentage ? `${rawTarget}%` : `₮${U.fmt(target)}`;
+  const currentDisplay = `₮${U.fmt(official?.[currency]||0)}`;
+  send(msg.chat.id, `✅ ${U.FLAGS[currency]} ${currency.toUpperCase()} ${targetDisplay} ${direction==='above'?'дээш':'доош'} хүрвэл мэдэгдэнэ.\nОдоо: ${currentDisplay}`);
 });
 
 bot.onText(/\/delalert (.+)/, async (msg, match) => {
@@ -384,7 +418,7 @@ bot.onText(/\/help/, async msg => {
   text += `🏠 Зээл → сарын төлбөр, хүү харьцуулах\n`;
   text += `💳 Кредит → хамгийн хямд хүү\n`;
   text += `💸 Илгээх → Wise-р 3 дахин хямд\n`;
-  text += `🔔 Мэдэгдэл → ханш өөрчлөгдвөл мэд\n`;
+  text += `   absolute: /alert USD 3580, percentage: /alert USD +2%\n`;
   text += `📊 Хүү харах → бүх банкны хүү\n\n`;
   if (official?.usd) text += `📊 Одоо: 1$ = ₮${U.fmt(official.usd)}`;
   send(msg.chat.id, text);
@@ -622,9 +656,26 @@ async function checkAlerts() {
   const official = await U.getOfficial(); if (!official) return;
   for (const a of alerts) {
     const rate = official[a.currency]; if (!rate) continue;
-    const triggered = a.direction === 'above' ? rate >= a.target : rate <= a.target;
+    let triggered = false;
+    if (a.is_percentage) {
+      // For percentage alerts, calculate change from approximate original rate
+      // We store the original_target percentage, so we can compute what the rate should be
+      const changePercent = a.original_target || 0;
+      const currentRate = official[a.currency];
+      // Approximate original rate when alert was set
+      // If alert was set for +5% and current rate is known, original ≈ current / (1 + changePercent/100)
+      const originalRate = currentRate / (1 + changePercent/100);
+      const actualChangePercent = ((currentRate - originalRate) / originalRate) * 100;
+      triggered = a.direction === 'above' ? actualChangePercent >= changePercent : actualChangePercent <= changePercent;
+    } else {
+      // Absolute value alert
+      triggered = a.direction === 'above' ? rate >= a.target : rate <= a.target;
+    }
     if (triggered) {
-      send(a.chat_id, `🔔 ${U.FLAGS[a.currency]} ${a.currency.toUpperCase()} одоо <b>₮${U.fmt(rate)}</b> — таны мэдэгдэл идэвхжлээ!`);
+      const changeInfo = a.is_percentage ? 
+        ` (${a.original_target >= 0 ? '+' : ''}${a.original_target}% шинчлэг)` : 
+        '';
+      send(a.chat_id, `🔔 ${U.FLAGS[a.currency]} ${a.currency.toUpperCase()} одоо <b>₮${U.fmt(rate)}</b>${changeInfo} — таны мэдэгдэл идэвхжлээ!`);
       await supabase.from('alerts').delete().eq('id',a.id);
     }
   }
