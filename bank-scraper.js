@@ -4,8 +4,19 @@
 
 const axios = require('axios');
 const cheerio = require('cheerio');
+// ─── Retry with exponential backoff ───
+async function fetchWithRetry(url, opts = {}, maxRetries = 3, delay = 1000) {
+  let lastError;
+  for (let i = 0; i < maxRetries; i++) {
+    try { return await axios(url, opts); } catch (e) { lastError = e; }
+    await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
+  }
+  throw lastError;
+}
 
-const CURRENCIES = ['USD', 'CNY', 'EUR', 'RUB', 'JPY', 'KRW', 'GBP'];
+
+
+const CURRENCIES = ['USD', 'CNY', 'EUR', 'RUB', 'JPY', 'KRW', 'GBP', 'AUD', 'SGD', 'THB', 'INR'];
 const CUR_SET = new Set(CURRENCIES);
 
 const UA_LIST = [
@@ -17,7 +28,7 @@ const UA_LIST = [
 function randUA() { return UA_LIST[Math.floor(Math.random() * UA_LIST.length)]; }
 
 async function fetchPage(url, timeout = 10000) {
-  const { data } = await axios.get(url, {
+  const { data } = await fetchWithRetry(url, {
     timeout,
     headers: { 'User-Agent': randUA(), 'Accept': 'text/html,application/xhtml+xml' }
   });
@@ -75,8 +86,8 @@ async function fetchGolomt() {
   for (const cur of CURRENCIES) {
     try {
       const [buyRes, sellRes] = await Promise.all([
-        axios.get(`https://www.golomtbank.com/api/exchangerateinfo?date=${d}&from=${cur}&to=MNT&type=cash_buy`, {timeout:5000, headers:{'User-Agent':randUA()}}),
-        axios.get(`https://www.golomtbank.com/api/exchangerateinfo?date=${d}&from=${cur}&to=MNT&type=cash_sell`, {timeout:5000, headers:{'User-Agent':randUA()}}),
+        fetchWithRetry(`https://www.golomtbank.com/api/exchangerateinfo?date=${d}&from=${cur}&to=MNT&type=cash_buy`, {timeout:5000, headers:{'User-Agent':randUA()}}),
+        fetchWithRetry(`https://www.golomtbank.com/api/exchangerateinfo?date=${d}&from=${cur}&to=MNT&type=cash_sell`, {timeout:5000, headers:{'User-Agent':randUA()}}),
       ]);
       const buy = parseFloat(buyRes.data?.rate?.cvalue?.[0]||0);
       const sell = parseFloat(sellRes.data?.rate?.cvalue?.[0]||0);
@@ -90,7 +101,7 @@ async function fetchGolomt() {
 // Note: Often unreachable from overseas servers (DNS/connectivity)
 async function fetchKhanBank() {
   try {
-    const { data } = await axios.get('https://www.khanbank.com/api/site/home?lang=mn&site=personal', {
+    const { data } = await fetchWithRetry('https://www.khanbank.com/api/site/home?lang=mn&site=personal', {
       timeout: 8000,
       headers: { 'User-Agent': randUA(), 'Accept': 'application/json' }
     });

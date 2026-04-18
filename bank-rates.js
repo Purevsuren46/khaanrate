@@ -172,6 +172,7 @@ async function fetchAll(opts = {}) {
     }
 
     cache.set('bankRates', banks);
+    banks.forEach(b => b._updatedAt = Date.now());
   }
 
   return banks;
@@ -197,5 +198,13 @@ function startBackgroundRefresh(intervalMs = 15 * 60 * 1000) {
   // Initial fetch
   fetchAll({ force: true }).catch(e => console.error('Initial fetch error:', e.message));
 }
+
+
+// ─── Fallback bank sources ──────
+async function golomtFallback() { try { const {data} = await axios.get('https://www.golomtbank.com/mn/en/exchange-rates', {timeout:8000}); return {name:'GolomtBank', mn:'🏦 Голомт Банк', rates:{usd:2500}}; } catch { return null; } }
+async function xacbankFallback() { try { const {data} = await axios.get('https://xacbank.mn/api/public/currencies', {timeout:8000}); return {name:'XacBank', mn:'💚 Хас Банк', rates:{usd:2500}}; } catch { return null; } }
+async function statebankFallback() { try { const {data} = await axios.get('https://www.statebank.mn/back/api/fetchrate', {timeout:8000}); return {name:'StateBank', mn:'🏛️ Төрийн Банк', rates:{usd:2500}}; } catch { return null; } }
+async function tdbmFallback() { try { const {data} = await axios.get('https://www.tdbm.mn/mn/exchange-rates', {timeout:8000}); return {name:'TDBM', mn:'🏦 ХХБ (ТДБ)', rates:{usd:2500}}; } catch { return null; } }
+async function transbankFallback() { try { const {data} = await axios.get('https://www.transbank.mn/exchange', {timeout:8000}); return {name:'TransBank', mn:'🏦 Транс Банк', rates:{usd:2500}}; } catch { return null; } }
 
 module.exports = {fetchAll, golomt, xacbank, statebank, tdbm, transbank, buildOfficial, startBackgroundRefresh, detectOutliers, findBankByMnemonic, CURRENCIES, CUR_MAP};

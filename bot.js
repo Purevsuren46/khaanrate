@@ -456,6 +456,19 @@ bot.onText(/\/debug (.+)/, async (msg, match) => {
   send(msg.chat.id, text);
 });
 
+
+// ─── /missingbanks ───
+bot.onText(/\/missingbanks/, async msg => {
+  const banks = await fetchAll();
+  const now = Date.now();
+  const stale = banks.filter(b => now - (b._updatedAt || 0) > 15 * 60 * 1000);
+  if (stale.length === 0) {
+    send(msg.chat.id, '✅ Бүх банкны ханш шинэ.');
+    return;
+  }
+  send(msg.chat.id, '⚠️ Сталын ханш олдсонгүй:\\n' + stale.map(b => b.mn + ' (' + b.name + ')').join('\\n'));
+});
+
 // ─── /best /share /report ────────────────────────────────────────
 bot.onText(/\/best (.+)/, async (msg,m) => {
   const c = m[1].toLowerCase().trim();
