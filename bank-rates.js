@@ -180,11 +180,32 @@ async function fetchAll(opts = {}) {
 
 // ─── Get official rate ──────────────────────────────────────────
 function buildOfficial(banks) {
-  const sb = banks.find(b => b.name === 'StateBank');
-  if (sb?.official && Object.values(sb.official).some(v => v > 0)) return sb.official;
-  const xb = banks.find(b => b.name === 'XacBank');
-  if (xb?.official && Object.values(xb.official).some(v => v > 0)) return xb.official;
-  return null;
+  const active = banks.filter(b => b.name !== 'MongolBank' && b.name !== 'StateBank' &&
+    Object.values(b.rates).some(r => r.buy > 0 && r.sell > 0));
+  if (active.length === 0) return null;
+  // Pick bank whose mid-price is closest to the group mid-price
+  const groupMid = {};
+  for (const c of CURRENCIES) {
+    const mids = active.map(b => {
+      const r = b.rates[c];
+      return r && r.buy > 0 && r.sell > 0 ? (r.buy + r.sell) / 2 : null;
+    }).filter(v => v !== null);
+    if (mids.length > 0) groupMid[c] = mids.reduce((a,b) => a+b,0) / mids.length;
+  }
+  let bestBank = null, bestScore = Infinity;
+  for (const b of active) {
+    let score = 0;
+    for (const c of CURRENCIES) {
+      if (!groupMid[c]) continue;
+      const r = b.rates[c];
+      if (r && r.buy > 0 && r.sell > 0) {
+        const mid = (r.buy + r.sell) / 2;
+        score += Math.abs(mid - groupMid[c]);
+      }
+    }
+    if (score < bestScore) { bestScore = score; bestBank = b; }
+  }
+  return bestBank ? bestBank.official || bestBank.rates : null;
 }
 
 // ─── Background refresh ─────────────────────────────────────────
