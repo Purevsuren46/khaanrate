@@ -424,6 +424,38 @@ bot.onText(/\/help/, async msg => {
   send(msg.chat.id, text);
 });
 
+// ─── /debug ──────────────────────────────────────────────
+bot.onText(/\/debug (.+)/, async (msg, match) => {
+  const mnemonic = match[1].trim();
+  const banks = await fetchAll();
+  const bank = findBankByMnemonic(banks, mnemonic);
+  if (!bank) {
+    send(msg.chat.id, "\u274c Ban mnemonic. Haan haruulna uu.");
+    return;
+  }
+  let url = "";
+  if (bank.name === "StateBank") url = "https://www.statebank.mn/back/api/fetchrate";
+  else if (bank.name === "XacBank") url = "https://xacbank.mn/api/currencies";
+  else if (bank.name === "GolomtBank") url = "https://www.golomtbank.com/api/exchangerateinfo";
+  else if (bank.name === "Tdbm") url = "https://www.tdbm.mn/mn/exchange-rates";
+  else if (bank.name === "TransBank") url = "https://www.transbank.mn/exchange";
+  let text = "📊 " + bank.mn + " — " + bank.name + "\n\n";
+  for (const c of CURRENCIES) {
+    const r = bank.rates[c];
+    if (!r || (!r.buy && !r.sell)) continue;
+    text += U.FLAGS[c] + " " + c.toUpperCase() + ": ";
+    if (r.buy && r.sell) {
+      text += "Buy " + U.fmt(r.buy) + " / Sell " + U.fmt(r.sell) + " ₮" + U.fmt(r.sell) + "\n";
+    } else if (r.sell) {
+      text += "Sell " + U.fmt(r.sell) + " ₮\n";
+    } else {
+      text += "Buy " + U.fmt(r.buy) + " ₮\n";
+    }
+  }
+  text += "🕐 Сяг: " + new Date().toLocaleTimeString("en-US", {hour:"2-digit", minute:"2-digit", timeZone:"Asia/Ulaanbaatar"}) + " | " + url;
+  send(msg.chat.id, text);
+});
+
 // ─── /best /share /report ────────────────────────────────────────
 bot.onText(/\/best (.+)/, async (msg,m) => {
   const c = m[1].toLowerCase().trim();

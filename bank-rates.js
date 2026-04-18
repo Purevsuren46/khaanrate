@@ -113,7 +113,19 @@ async function transbank() {
   } catch { return null; }
 }
 
-// ─── Outlier Detection ───────────────────────────────────────────
+// ─── Outlier Detection ───────────────────────────────────────────// ─── Find bank by mnemonic ────────────────────────────────────────────────
+function findBankByMnemonic(banks, mnemonic) {
+  const key = mnemonic.toLowerCase().replace(/[\s_]/g,'');
+  return banks.find(b => {
+    const normalized = b.mn.toLowerCase().replace(/[\s_]/g,'');
+    return normalized.includes(key) || key.includes(normalized) ||
+           b.name.toLowerCase().includes(key) || key.includes(b.name.toLowerCase());
+  }) || banks.find(b => b.name.toLowerCase().includes(key)) ||
+     banks.find(b => b.name.toLowerCase().includes(mnemonic.toLowerCase())) ||
+     banks.find(b => b.mn.toLowerCase().includes(mnemonic.toLowerCase()));
+}
+
+
 function detectOutliers(banks, prevBanks) {
   if (!prevBanks) return [];
   const alerts = [];
@@ -186,4 +198,4 @@ function startBackgroundRefresh(intervalMs = 15 * 60 * 1000) {
   fetchAll({ force: true }).catch(e => console.error('Initial fetch error:', e.message));
 }
 
-module.exports = {fetchAll, golomt, xacbank, statebank, tdbm, transbank, buildOfficial, startBackgroundRefresh, detectOutliers, CURRENCIES, CUR_MAP};
+module.exports = {fetchAll, golomt, xacbank, statebank, tdbm, transbank, buildOfficial, startBackgroundRefresh, detectOutliers, findBankByMnemonic, CURRENCIES, CUR_MAP};
