@@ -205,7 +205,12 @@ function buildOfficial(banks) {
     }
     if (score < bestScore) { bestScore = score; bestBank = b; }
   }
-  return bestBank ? bestBank.official || bestBank.rates : null;
+  const result = {};
+  for (const c of CURRENCIES) {
+    const r = bestBank.rates[c];
+    result[c] = r && r.sell ? r.sell : 0;
+  }
+  return result;
 }
 
 // ─── Background refresh ─────────────────────────────────────────
