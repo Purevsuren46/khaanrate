@@ -1,0 +1,49 @@
+{
+  "name": "khaanrate",
+  "version": "1.0.0",
+  "description": "Mongolian SME Loan SaaS Orchestrator - Production 1.0",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --experimental-vm-modules node_modules/vitest/run.js",
+    "test": "node --experimental-vm-modules node_modules/vitest/run.js run",
+    "build": "tsc --noEmit",
+    "lint": "echo 'TODO: add linting'"
+  },
+  "dependencies": {
+    "@fastify/cors": "^8.4.0",
+    "@fastify/cookie": "^9.2.0",
+    "@fastify/swagger": "^8.3.0",
+    "@fastify/websocket": "^9.0.0",
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "ajv": "^8.17.1",
+    "axios": "^1.7.0",
+    "bignumber.js": "^9.2.2",
+    "cheerio": "^1.2.0",
+    "cron": "^3.4.3",
+    "fastify": "^4.28.0",
+    "ioredis": "^5.3.2",
+    "joi": "^17.13.3",
+    "minimist": "^1.2.8",
+    "node-cache": "^5.1.2",
+    "node-fetch": "^3.3.2",
+    "nodemailer": "^6.9.16",
+    "openai": "^4.43.2",
+    "papaparse": "^5.4.1",
+    "pg": "^8.12.0",
+    "pino": "^9.1.0",
+    "pino-pretty": "^11.1.0",
+    "sharp": "^0.33.5",
+    "uuid": "^9.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.4",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  },
+  "keywords": ["mongolia", "loans", "msme", "fintech", "saas"],
+  "license": "MIT"
+}
